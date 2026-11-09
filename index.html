@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="application-name" content="What to Eat">
+<meta name="apple-mobile-web-app-title" content="What to Eat">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#d9582b">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<title>What to Eat</title>
+<style>
+:root{--bg:#fbf7f2;--card:#fff;--ink:#2b2420;--mute:#7a6f66;--line:#eadfd3;--accent:#d9582b;--accent-ink:#fff;--soft:#fdeee6;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1b1714;--card:#262019;--ink:#f3ebe3;--mute:#a69a8f;--line:#3a3128;--accent:#f0764a;--accent-ink:#1b1714;--soft:#3a2a21}}
+:root[data-theme="dark"]{--bg:#1b1714;--card:#262019;--ink:#f3ebe3;--mute:#a69a8f;--line:#3a3128;--accent:#f0764a;--accent-ink:#1b1714;--soft:#3a2a21}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:640px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:1.5rem;margin:8px 0 2px}
+.sub{color:var(--mute);margin:0 0 18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:16px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.fl{font-size:.8rem;color:var(--mute);margin:10px 0 4px}
+.fl:first-child{margin-top:0}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:transparent;color:var(--ink);padding:5px 12px;border-radius:999px;font:inherit;font-size:.9rem;cursor:pointer}
+.chip.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button{font:inherit;cursor:pointer}
+.btn{border:0;background:var(--accent);color:var(--accent-ink);padding:10px 16px;border-radius:10px;font-weight:600}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);font-weight:500}
+.btn.sm{padding:6px 10px;font-size:.85rem}
+.pick{background:var(--soft);border-radius:12px;padding:16px;margin:14px 0 12px}
+.pick .name{font-size:1.4rem;font-weight:700}
+.pick .tags{color:var(--mute);font-size:.9rem;margin-top:2px}
+.pick .why{margin-top:6px;font-size:.95rem}
+.empty{color:var(--mute);padding:14px 0 10px}
+input[type=text],input[type=number],select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit}
+label.lbl{display:block;font-size:.85rem;color:var(--mute);margin:12px 0 4px}
+.chk{display:inline-flex;gap:5px;align-items:center;margin-right:12px;font-size:.95rem}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+h2{font-size:1.05rem;margin:0 0 10px}
+.item{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.item:first-of-type{border-top:0}
+.item .meta{color:var(--mute);font-size:.85rem}
+.item .nm{font-weight:600}
+.x{background:none;border:0;color:var(--mute);font-size:1.1rem;padding:6px}
+.bar{height:6px;border-radius:4px;background:var(--line);margin-top:5px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent)}
+.top{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:16px}
+.top .status{color:var(--mute);font-size:.85rem}
+.install{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:16px;font-size:.95rem}
+.install ol{margin:6px 0 0;padding-left:20px}
+.install p{margin:0 0 4px}
+</style>
+</head>
+<body>
+<main>
+  <h1>What should I eat today?</h1>
+  <p class="sub">Tell me what you feel like. I’ll pick from your own places, favouring the ones you go to most.</p>
+
+  <div class="top">
+    <button class="btn ghost sm" id="install" hidden>Add to home screen</button>
+    <span class="status" id="status">Saved on this device</span>
+  </div>
+  <div class="install" id="installHelp" hidden>
+    <p><strong>To add this to your home screen:</strong></p>
+    <ol>
+      <li><strong>iPhone (Safari):</strong> tap the Share button, then “Add to Home Screen”.</li>
+      <li><strong>Android (Chrome):</strong> tap the ⋮ menu, then “Install app” or “Add to home screen”.</li>
+    </ol>
+  </div>
+
+  <section class="card">
+    <div id="filters"></div>
+    <div id="result"></div>
+    <div class="row"><button class="btn" id="suggest">Suggest something</button></div>
+  </section>
+
+  <section class="card">
+    <h2 id="formTitle">Add a place</h2>
+    <label class="lbl" for="name">Name</label>
+    <input type="text" id="name" placeholder="e.g. Delish Food Village">
+    <label class="lbl">Usually for</label>
+    <div id="mealChecks"></div>
+    <label class="lbl">Food type</label>
+    <div id="foodChecks"></div>
+    <div class="two">
+      <div><label class="lbl" for="price">Price range</label>
+        <select id="price"><option value="">Not set</option><option>Low</option><option>Medium</option><option>High</option></select></div>
+      <div><label class="lbl" for="dist">Distance from MSN Bukit Jalil (km)</label>
+        <input type="number" id="dist" min="0" step="0.5" placeholder="e.g. 2.5"></div>
+    </div>
+    <label class="lbl" for="base">Roughly how many times have you been before? (optional)</label>
+    <input type="number" id="base" min="0" placeholder="0">
+    <div class="row" style="margin-top:14px">
+      <button class="btn" id="add">Add place</button>
+      <button class="btn ghost" id="cancel" hidden>Cancel</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:6px">
+      <h2 style="margin:0">Your places</h2>
+      <div class="row">
+        <button class="btn ghost sm" id="backup">Back up</button>
+        <label class="btn ghost sm" for="restore" style="cursor:pointer">Restore</label>
+        <input type="file" id="restore" accept="application/json,.json" hidden>
+      </div>
+    </div>
+    <div id="list"></div>
+  </section>
+</main>
+
+<script>
+const KEY = "what-to-eat-v1";
+const MEALS = ["Breakfast","Lunch","Dinner","Snack"];
+const FOODS = ["Rice","Noodles","Other"];
+const WHO = ["Alone","Friends","Family","Partner","Colleagues"];
+const PRICES = ["Low","Medium","High"];
+const DISTS = {"≤ 2 km":2,"≤ 5 km":5,"≤ 10 km":10};
+const FILTERS = [
+  {k:"meal",label:"Meal",opts:MEALS},
+  {k:"food",label:"Feeling like",opts:["Any",...FOODS]},
+  {k:"budget",label:"Budget",opts:["Any","Low","Medium"]},
+  {k:"dist",label:"Nearby (from MSN Bukit Jalil)",opts:["Any",...Object.keys(DISTS)]},
+  {k:"who",label:"Eating with",opts:["Any",...WHO]}
+];
+const DAY = 86400000;
+let state = load();
+let f = {meal:defaultMeal(), food:"Any", budget:"Any", dist:"Any", who:"Any"};
+let skipped = new Set();
+let current = null;
+let editing = null;
+
+function normalise(s){
+  if (s && Array.isArray(s.places)){
+    return {places: s.places.map(p => ({foods:[],price:"",dist:null,base:0,meals:[],visits:[],...p}))};
+  }
+  return null;
+}
+function load(){
+  try{ const s = normalise(JSON.parse(localStorage.getItem(KEY) || "null")); if (s) return s; }catch(e){}
+  return {places:[]};
+}
+function setStatus(t){ const el = document.getElementById("status"); if (el) el.textContent = t; }
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify(state)); setStatus("Saved on this device"); }
+  catch(e){ setStatus("Couldn’t save on this device"); }
+}
+let deferred = null;
+function initInstall(){
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  if (standalone) return;
+  const btn = document.getElementById("install");
+  btn.hidden = false;
+  window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferred = e; });
+  btn.addEventListener("click", async () => {
+    if (deferred){
+      try{ deferred.prompt(); await deferred.userChoice; }catch(e){}
+      deferred = null; return;
+    }
+    const h = document.getElementById("installHelp");
+    h.hidden = !h.hidden;
+  });
+}
+function defaultMeal(){
+  const h = new Date().getHours();
+  return h < 11 ? "Breakfast" : h < 16 ? "Lunch" : h < 22 ? "Dinner" : "Snack";
+}
+const uid = () => Math.random().toString(36).slice(2,9);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function stats(p){
+  const now = Date.now();
+  const recent = p.visits.filter(v => now - v.t < 60*DAY).length;
+  const total = (p.base||0) + p.visits.length;
+  const last = p.visits.length ? Math.max(...p.visits.map(v=>v.t)) : null;
+  return {recent, total, last, days: last ? (now-last)/DAY : null};
+}
+function withCount(p){ return f.who === "Any" ? 0 : p.visits.filter(v => v.who === f.who).length; }
+function weight(p){
+  const s = stats(p);
+  const freq = 1 + (p.base||0)*0.4 + s.recent*1.5 + p.visits.length*0.3;
+  const rec = s.days === null ? 1 : s.days < 1 ? 0.85 : 1 + Math.min(s.days,14)/14*0.3;
+  return freq * rec * (1 + withCount(p)*0.5);
+}
+function why(p){
+  const s = stats(p), parts = [];
+  if (s.total > 0) parts.push("You’ve been " + s.total + " time" + (s.total===1?"":"s"));
+  const w = withCount(p);
+  if (w > 0) parts.push(w + " with " + f.who.toLowerCase());
+  if (s.days !== null){
+    const d = Math.floor(s.days);
+    parts.push(d === 0 ? "last visit today" : "last visit " + d + " day" + (d===1?"":"s") + " ago");
+  }
+  return parts.length ? parts.join(", ") + "." : "You haven’t logged this one yet. Worth a go?";
+}
+function matches(p){
+  if (p.meals.length && !p.meals.includes(f.meal)) return false;
+  if (f.food !== "Any" && !p.foods.includes(f.food)) return false;
+  if (f.budget !== "Any"){
+    if (!p.price) return false;
+    if (PRICES.indexOf(p.price) > PRICES.indexOf(f.budget)) return false;
+  }
+  if (f.dist !== "Any" && (p.dist === null || p.dist === "" || p.dist > DISTS[f.dist])) return false;
+  return true;
+}
+const candidates = () => state.places.filter(p => matches(p) && !skipped.has(p.id));
+
+function suggest(){
+  let pool = candidates();
+  if (!pool.length && skipped.size){ skipped.clear(); pool = candidates(); }
+  if (!pool.length){ current = null; render(); return; }
+  const ws = pool.map(weight);
+  let r = Math.random() * ws.reduce((a,b)=>a+b,0);
+  let pick = pool[pool.length-1];
+  for (let i=0;i<pool.length;i++){ r -= ws[i]; if (r <= 0){ pick = pool[i]; break; } }
+  current = pick.id;
+  render();
+}
+function logVisit(id){
+  const p = state.places.find(x => x.id === id);
+  if (!p) return;
+  p.visits.push({t: Date.now(), meal: f.meal, who: f.who === "Any" ? null : f.who});
+  save(); skipped.clear();
+}
+function tagLine(p){
+  const bits = [];
+  if (p.price) bits.push(p.price + " price");
+  if (p.dist !== null && p.dist !== "") bits.push(p.dist + " km");
+  if (p.foods.length) bits.push(p.foods.join("/"));
+  return bits.join(" · ");
+}
+
+function render(){
+  document.getElementById("filters").innerHTML = FILTERS.map(g =>
+    `<div class="fl">${g.label}</div><div class="chips">` +
+    g.opts.map(o => `<button class="chip ${f[g.k]===o?"on":""}" data-f="${g.k}" data-v="${esc(o)}">${esc(o)}</button>`).join("") + `</div>`).join("");
+
+  const res = document.getElementById("result");
+  const p = state.places.find(x => x.id === current);
+  if (!state.places.length){
+    res.innerHTML = `<div class="empty">Add your first place below to get started.</div>`;
+  } else if (p){
+    res.innerHTML = `<div class="pick"><div class="name">${esc(p.name)}</div>
+      <div class="tags">${esc(tagLine(p))}</div><div class="why">${esc(why(p))}</div></div>
+      <div class="row" style="margin-bottom:12px">
+        <button class="btn" data-eat="${p.id}">I’m eating here</button>
+        <button class="btn ghost" id="another">Not this one</button></div>`;
+  } else if (!candidates().length){
+    res.innerHTML = `<div class="empty">Nothing matches these choices. Places without a food type, price or distance are left out when you filter on that. Tap Edit on a place to add the missing tags.</div>`;
+  } else {
+    res.innerHTML = `<div class="empty">Choose what you feel like, then tap the button.</div>`;
+  }
+  document.getElementById("suggest").textContent = p ? "Suggest again" : "Suggest something";
+
+  const list = document.getElementById("list");
+  if (!state.places.length){ list.innerHTML = `<div class="empty">Nothing here yet.</div>`; return; }
+  const sorted = [...state.places].sort((a,b) => stats(b).total - stats(a).total);
+  const max = Math.max(1, ...sorted.map(x => stats(x).total));
+  list.innerHTML = sorted.map(x => {
+    const s = stats(x);
+    const last = s.last ? new Date(s.last).toLocaleDateString(undefined,{day:"numeric",month:"short"}) : "never logged";
+    const t = tagLine(x);
+    return `<div class="item"><div style="flex:1;min-width:0">
+      <div class="nm">${esc(x.name)}</div>
+      <div class="meta">${s.total} visit${s.total===1?"":"s"} · last: ${last}${x.meals.length ? " · " + x.meals.join(", ") : ""}</div>
+      ${t ? `<div class="meta">${esc(t)}</div>` : ""}
+      <div class="bar"><i style="width:${Math.round(s.total/max*100)}%"></i></div></div>
+      <button class="btn ghost sm" data-eat="${x.id}" title="Log a visit today">+1</button>
+      <button class="btn ghost sm" data-edit="${x.id}">Edit</button>
+      <button class="x" data-del="${x.id}" aria-label="Remove ${esc(x.name)}">✕</button></div>`;
+  }).join("");
+}
+
+const $ = id => document.getElementById(id);
+function checks(name){ return [...document.querySelectorAll(`#${name} input:checked`)].map(i => i.value); }
+function setChecks(name, vals){ document.querySelectorAll(`#${name} input`).forEach(i => i.checked = vals.includes(i.value)); }
+function resetForm(){
+  editing = null;
+  $("name").value = ""; $("base").value = ""; $("dist").value = ""; $("price").value = "";
+  setChecks("mealChecks", []); setChecks("foodChecks", []);
+  $("add").textContent = "Add place"; $("formTitle").textContent = "Add a place"; $("cancel").hidden = true;
+}
+
+document.addEventListener("click", e => {
+  const t = e.target.closest("button");
+  if (!t) return;
+  if (t.dataset.f){ f[t.dataset.f] = t.dataset.v; skipped.clear(); current = null; render(); }
+  else if (t.dataset.eat){ logVisit(t.dataset.eat); current = null; render(); }
+  else if (t.dataset.edit){
+    const p = state.places.find(x => x.id === t.dataset.edit);
+    if (!p) return;
+    editing = p.id;
+    $("name").value = p.name; $("base").value = p.base || ""; $("price").value = p.price || "";
+    $("dist").value = p.dist === null ? "" : p.dist;
+    setChecks("mealChecks", p.meals); setChecks("foodChecks", p.foods);
+    $("add").textContent = "Save changes"; $("formTitle").textContent = "Edit place"; $("cancel").hidden = false;
+    $("name").scrollIntoView({behavior:"smooth", block:"center"}); $("name").focus();
+  }
+  else if (t.dataset.del){
+    const p = state.places.find(x => x.id === t.dataset.del);
+    if (p && confirm("Remove " + p.name + " and its history?")){
+      state.places = state.places.filter(x => x.id !== p.id);
+      if (current === p.id) current = null;
+      if (editing === p.id) resetForm();
+      save(); render();
+    }
+  }
+  else if (t.id === "another"){ skipped.add(current); suggest(); }
+  else if (t.id === "suggest"){ if (current) skipped.add(current); suggest(); }
+  else if (t.id === "cancel"){ resetForm(); }
+  else if (t.id === "add"){
+    const name = $("name").value.trim();
+    if (!name){ $("name").focus(); return; }
+    if (state.places.some(p => p.id !== editing && p.name.toLowerCase() === name.toLowerCase())){ alert("That place is already in your list."); return; }
+    const d = parseFloat($("dist").value);
+    const data = {
+      name, meals: checks("mealChecks"), foods: checks("foodChecks"), price: $("price").value,
+      dist: isNaN(d) ? null : d, base: Math.max(0, parseInt($("base").value, 10) || 0)
+    };
+    if (editing){
+      const p = state.places.find(x => x.id === editing);
+      if (p) Object.assign(p, data);
+    } else {
+      state.places.push({id: uid(), visits: [], ...data});
+    }
+    save(); resetForm(); render();
+  }
+});
+$("name").addEventListener("keydown", e => { if (e.key === "Enter") $("add").click(); });
+$("mealChecks").innerHTML = MEALS.map(m => `<label class="chk"><input type="checkbox" value="${m}"> ${m}</label>`).join("");
+$("foodChecks").innerHTML = FOODS.map(m => `<label class="chk"><input type="checkbox" value="${m}"> ${m}</label>`).join("");
+$("backup").addEventListener("click", () => {
+  const b = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(b); a.download = "what-to-eat-backup.json";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+$("restore").addEventListener("change", async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try{
+    const s = normalise(JSON.parse(await file.text()));
+    if (!s) throw new Error("bad");
+    if (!confirm("Replace your current places with this backup?")) { e.target.value = ""; return; }
+    state = s; save(); current = null; skipped.clear(); render();
+  }catch(err){ alert("That file isn’t a valid backup."); }
+  e.target.value = "";
+});
+render();
+initInstall();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
