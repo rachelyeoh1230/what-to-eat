@@ -56,6 +56,8 @@ h2{font-size:1.05rem;margin:0 0 10px}
 .install{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:16px;font-size:.95rem}
 .install ol{margin:6px 0 0;padding-left:20px}
 .install p{margin:0 0 4px}
+.note{background:var(--soft);border-radius:10px;padding:10px 12px;margin:10px 0;font-size:.92rem}
+.hit{padding:12px 0}
 </style>
 </head>
 <body>
@@ -100,24 +102,31 @@ h2{font-size:1.05rem;margin:0 0 10px}
 
   <section class="card">
     <div id="filters"></div>
+    <div class="meta" id="locLine" style="color:var(--mute);font-size:.85rem;margin-top:10px"></div>
+    <div class="row" style="margin-top:12px"><button class="btn" id="suggest">Suggest places</button></div>
     <div id="result"></div>
-    <div class="row"><button class="btn" id="suggest">Suggest something</button></div>
   </section>
 
   <section class="card">
     <h2 id="formTitle">Add a place</h2>
     <label class="lbl" for="name">Name</label>
-    <input type="text" id="name" placeholder="e.g. Delish Food Village">
-    <label class="lbl">Usually for</label>
+    <div class="row" style="flex-wrap:nowrap">
+      <input type="text" id="name" placeholder="e.g. Delish Food Village">
+      <button class="btn ghost" id="gsearch" hidden style="white-space:nowrap">Search Google</button>
+    </div>
+    <div id="gnote" class="meta" style="color:var(--mute);font-size:.85rem;margin-top:6px" hidden>Google search isn’t switched on yet. Add your key in <code>google-config.js</code> to fill in price and location automatically.</div>
+    <div id="gres"></div>
+    <label class="lbl">Usually for (leave empty for any meal)</label>
     <div id="mealChecks"></div>
     <label class="lbl">Food type</label>
     <div id="foodChecks"></div>
     <div class="two">
-      <div><label class="lbl" for="price">Price range</label>
-        <select id="price"><option value="">Not set</option><option>Low</option><option>Medium</option><option>High</option></select></div>
-      <div><label class="lbl" for="dist">Distance from MSN Bukit Jalil (km)</label>
+      <div><label class="lbl" for="price">Price per person (RM)</label>
+        <input type="number" id="price" min="0" step="0.5" placeholder="e.g. 15"></div>
+      <div><label class="lbl" for="dist">Distance in km (only if no Google location)</label>
         <input type="number" id="dist" min="0" step="0.5" placeholder="e.g. 2.5"></div>
     </div>
+    <div class="row" style="margin-top:8px"><button class="btn ghost sm" id="here">I’m at this place now: save my location</button><span class="meta" id="hereMsg" style="color:var(--mute)"></span></div>
     <label class="lbl" for="base">Roughly how many times have you been before? (optional)</label>
     <input type="number" id="base" min="0" placeholder="0">
     <div class="row" style="margin-top:14px">
@@ -130,6 +139,7 @@ h2{font-size:1.05rem;margin:0 0 10px}
     <div class="row" style="justify-content:space-between;margin-bottom:6px">
       <h2 style="margin:0">Your places</h2>
       <div class="row">
+        <button class="btn ghost sm" id="enrich" hidden>Fill in from Google</button>
         <button class="btn ghost sm" id="backup">Back up</button>
         <label class="btn ghost sm" for="restore" style="cursor:pointer">Restore</label>
         <input type="file" id="restore" accept="application/json,.json" hidden>
@@ -143,30 +153,32 @@ h2{font-size:1.05rem;margin:0 0 10px}
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
+<script src="google-config.js"></script>
 <script>
 const KEY = "what-to-eat-v1";
-const MEALS = ["Breakfast","Lunch","Dinner","Snack"];
-const FOODS = ["Rice","Noodles","Other"];
-const WHO = ["Alone","Friends","Family","Partner","Colleagues"];
-const PRICES = ["Low","Medium","High"];
+const GKEY = window.GOOGLE_PLACES_KEY || "";
+const $ = id => document.getElementById(id);
+const MEALS = ["Breakfast","Lunch","Dinner","Supper","Snack","Dessert"];
+const FOODS = ["Rice","Noodles","Others"];
+const WHO = ["Alone","Friends","Family","Colleagues"];
+const BUDGETS = {"Low (≤ RM15)":15,"Medium (≤ RM35)":35};
 const DISTS = {"≤ 2 km":2,"≤ 5 km":5,"≤ 10 km":10};
+const BASE = {lat:3.0545, lng:101.6915};
+const LEGACY = {Low:12, Medium:25, High:50};
 const FILTERS = [
-  {k:"meal",label:"Meal",opts:MEALS},
+  {k:"meal",label:"Meal (Auto follows your clock)",opts:["Auto",...MEALS]},
   {k:"food",label:"Feeling like",opts:["Any",...FOODS]},
-  {k:"budget",label:"Budget",opts:["Any","Low","Medium"]},
-  {k:"dist",label:"Nearby (from MSN Bukit Jalil)",opts:["Any",...Object.keys(DISTS)]},
-  {k:"who",label:"Eating with",opts:["Any",...WHO]}
+  {k:"budget",label:"Budget",opts:["Any",...Object.keys(BUDGETS)]},
+  {k:"dist",label:"Nearby",opts:["Any",...Object.keys(DISTS)]},
+  {k:"who",label:"Eating with",opts:WHO}
 ];
-const DAY = 86400000;
-let state = load();
-let f = {meal:defaultMeal(), food:"Any", budget:"Any", dist:"Any", who:"Any"};
-let skipped = new Set();
-let current = null;
-let editing = null;
-
 function normalise(s){
   if (s && Array.isArray(s.places)){
-    return {places: s.places.map(p => ({foods:[],price:"",dist:null,base:0,meals:[],visits:[],...p}))};
+    return {places: s.places.map(p => {
+      const q = {foods:[],price:"",priceNum:null,priceText:"",dist:null,lat:null,lng:null,gid:"",rating:null,addr:"",kind:"",base:0,meals:[],visits:[],...p};
+      q.foods = q.foods.map(x => x === "Other" ? "Others" : x);
+      return q;
+    })};
   }
   return null;
 }
@@ -174,6 +186,12 @@ function load(){
   try{ const s = normalise(JSON.parse(localStorage.getItem(KEY) || "null")); if (s) return s; }catch(e){}
   return {places:[]};
 }
+let state = load();
+let f = {meal:"Auto", food:"Any", budget:"Any", dist:"Any", who:"Alone"};
+let shown = false, notice = null, editing = null, pending = null, gres = [], loc = null;
+const uid = () => Math.random().toString(36).slice(2,9);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
 let sync = {ready:false, user:null, ref:null, unsub:null, timer:null, auth:null, db:null, error:""};
 function setStatus(t){ const el = document.getElementById("status"); if (el) el.textContent = t; }
 function stateJson(){ return JSON.stringify(state); }
@@ -205,6 +223,8 @@ function mergeStates(a, b){
     ["meals","foods"].forEach(f => { q[f] = [...new Set([...(q[f]||[]), ...(p[f]||[])])]; });
     if (!q.price) q.price = p.price;
     if (q.dist === null || q.dist === "") q.dist = p.dist;
+    if (q.priceNum === null || q.priceNum === undefined){ q.priceNum = p.priceNum; q.priceText = p.priceText; }
+    if (q.lat === null || q.lat === undefined){ q.lat = p.lat; q.lng = p.lng; q.gid = p.gid; q.rating = p.rating; q.addr = p.addr; q.kind = p.kind; }
   });
   return {places: [...map.values()]};
 }
@@ -259,7 +279,7 @@ async function onUser(user){
     if (remote && !dirty) state = remote;
     else if (remote) state = mergeStates(state, remote);
     try{ localStorage.setItem(KEY, stateJson()); }catch(e){}
-    current = null; skipped.clear(); render();
+    render();
     if (!remote || dirty) await push();
     else { setDirty(false); setStatus("Synced to your account"); }
     sync.unsub = sync.ref.onSnapshot(s => {
@@ -269,7 +289,6 @@ async function onUser(user){
       if (!r || JSON.stringify(r) === stateJson()) return;
       state = r;
       try{ localStorage.setItem(KEY, stateJson()); }catch(e){}
-      if (!state.places.some(p => p.id === current)) current = null;
       render(); setStatus("Synced to your account");
     });
   }catch(e){ setStatus("Saved on this device (sync problem)"); sync.error = friendly(e); renderSync(); }
@@ -308,136 +327,236 @@ function initInstall(){
     h.hidden = !h.hidden;
   });
 }
-function defaultMeal(){
+
+function autoMeal(){
   const h = new Date().getHours();
-  return h < 11 ? "Breakfast" : h < 16 ? "Lunch" : h < 22 ? "Dinner" : "Snack";
+  return h >= 5 && h < 11 ? "Breakfast" : h < 16 && h >= 11 ? "Lunch" : h >= 16 && h < 22 ? "Dinner" : "Supper";
 }
-const uid = () => Math.random().toString(36).slice(2,9);
-const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-
+const curMeal = () => f.meal === "Auto" ? autoMeal() : f.meal;
 function stats(p){
-  const now = Date.now();
-  const recent = p.visits.filter(v => now - v.t < 60*DAY).length;
   const total = (p.base||0) + p.visits.length;
-  const last = p.visits.length ? Math.max(...p.visits.map(v=>v.t)) : null;
-  return {recent, total, last, days: last ? (now-last)/DAY : null};
+  const last = p.visits.length ? Math.max(...p.visits.map(v => v.t)) : null;
+  return {total, last};
 }
-function withCount(p){ return f.who === "Any" ? 0 : p.visits.filter(v => v.who === f.who).length; }
-function weight(p){
-  const s = stats(p);
-  const freq = 1 + (p.base||0)*0.4 + s.recent*1.5 + p.visits.length*0.3;
-  const rec = s.days === null ? 1 : s.days < 1 ? 0.85 : 1 + Math.min(s.days,14)/14*0.3;
-  return freq * rec * (1 + withCount(p)*0.5);
+const withCount = p => p.visits.filter(v => v.who === f.who).length;
+function priceVal(p){
+  if (typeof p.priceNum === "number") return p.priceNum;
+  return LEGACY[p.price] !== undefined ? LEGACY[p.price] : null;
 }
-function why(p){
-  const s = stats(p), parts = [];
-  if (s.total > 0) parts.push("You’ve been " + s.total + " time" + (s.total===1?"":"s"));
-  const w = withCount(p);
-  if (w > 0) parts.push(w + " with " + f.who.toLowerCase());
-  if (s.days !== null){
-    const d = Math.floor(s.days);
-    parts.push(d === 0 ? "last visit today" : "last visit " + d + " day" + (d===1?"":"s") + " ago");
-  }
-  return parts.length ? parts.join(", ") + "." : "You haven’t logged this one yet. Worth a go?";
+function priceLabel(p){
+  if (p.priceText) return p.priceText;
+  if (typeof p.priceNum === "number") return "RM" + p.priceNum;
+  return p.price ? p.price + " price" : "";
 }
-function matches(p){
-  if (p.meals.length && !p.meals.includes(f.meal)) return false;
-  if (f.food !== "Any" && !p.foods.includes(f.food)) return false;
-  if (f.budget !== "Any"){
-    if (!p.price) return false;
-    if (PRICES.indexOf(p.price) > PRICES.indexOf(f.budget)) return false;
-  }
-  if (f.dist !== "Any" && (p.dist === null || p.dist === "" || p.dist > DISTS[f.dist])) return false;
-  return true;
+function hav(a, b){
+  const R = 6371, r = x => x*Math.PI/180;
+  const dLat = r(b.lat-a.lat), dLng = r(b.lng-a.lng);
+  const h = Math.sin(dLat/2)**2 + Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
 }
-const candidates = () => state.places.filter(p => matches(p) && !skipped.has(p.id));
-
-function suggest(){
-  let pool = candidates();
-  if (!pool.length && skipped.size){ skipped.clear(); pool = candidates(); }
-  if (!pool.length){ current = null; render(); return; }
-  const ws = pool.map(weight);
-  let r = Math.random() * ws.reduce((a,b)=>a+b,0);
-  let pick = pool[pool.length-1];
-  for (let i=0;i<pool.length;i++){ r -= ws[i]; if (r <= 0){ pick = pool[i]; break; } }
-  current = pick.id;
-  render();
+function distKm(p){
+  if (typeof p.lat === "number" && typeof p.lng === "number") return hav(loc || BASE, p);
+  return (p.dist === null || p.dist === "" || p.dist === undefined) ? null : Number(p.dist);
 }
-function logVisit(id){
-  const p = state.places.find(x => x.id === id);
-  if (!p) return;
-  p.visits.push({t: Date.now(), meal: f.meal, who: f.who === "Any" ? null : f.who});
-  save(); skipped.clear();
+function getLoc(){
+  return new Promise(res => {
+    if (!navigator.geolocation){ res(); return; }
+    navigator.geolocation.getCurrentPosition(
+      p => { loc = {lat:p.coords.latitude, lng:p.coords.longitude}; res(); },
+      () => res(),
+      {enableHighAccuracy:false, timeout:8000, maximumAge:300000});
+  });
+}
+function detectFoods(t){
+  const o = [];
+  if (/\brice\b|nasi|biryani|bak kut teh|claypot|donburi|economy rice/i.test(t)) o.push("Rice");
+  if (/noodle|\bmee\b|\bmi\b|ramen|\bpho\b|laksa|udon|soba|kuey|kway|kuay|bihun|mihun|pasta|spaghetti|wantan|wonton/i.test(t)) o.push("Noodles");
+  return o.length ? o : ["Others"];
 }
 function tagLine(p){
-  const bits = [];
-  if (p.price) bits.push(p.price + " price");
-  if (p.dist !== null && p.dist !== "") bits.push(p.dist + " km");
-  if (p.foods.length) bits.push(p.foods.join("/"));
-  return bits.join(" · ");
+  const b = [], d = distKm(p);
+  if (priceLabel(p)) b.push(priceLabel(p));
+  if (d !== null) b.push(d.toFixed(1) + " km");
+  if (p.foods.length) b.push(p.foods.join("/"));
+  if (p.rating) b.push("★" + p.rating);
+  return b.join(" · ");
+}
+function matches(p){
+  if (p.meals.length && !p.meals.includes(curMeal())) return false;
+  if (f.food !== "Any" && !p.foods.includes(f.food)) return false;
+  if (f.budget !== "Any"){ const v = priceVal(p); if (v === null || v > BUDGETS[f.budget]) return false; }
+  if (f.dist !== "Any"){ const d = distKm(p); if (d === null || d > DISTS[f.dist]) return false; }
+  return true;
+}
+function hits(){
+  return state.places.filter(matches).sort((a,b) => {
+    const x = priceVal(a), y = priceVal(b);
+    if (x === null && y === null) return stats(b).total - stats(a).total;
+    if (x === null) return 1;
+    if (y === null) return -1;
+    return (x - y) || (stats(b).total - stats(a).total);
+  });
+}
+function visitLine(p){
+  const s = stats(p), w = withCount(p);
+  const last = s.last ? new Date(s.last).toLocaleDateString(undefined,{day:"numeric",month:"short"}) : "not logged yet";
+  return s.total + " visit" + (s.total===1?"":"s") + (w ? " (" + w + " " + (f.who==="Alone"?"alone":"with " + f.who.toLowerCase()) + ")" : "") + " · last: " + last;
 }
 
-function render(){
-  document.getElementById("filters").innerHTML = FILTERS.map(g =>
-    `<div class="fl">${g.label}</div><div class="chips">` +
-    g.opts.map(o => `<button class="chip ${f[g.k]===o?"on":""}" data-f="${g.k}" data-v="${esc(o)}">${esc(o)}</button>`).join("") + `</div>`).join("");
-
-  const res = document.getElementById("result");
-  const p = state.places.find(x => x.id === current);
-  if (!state.places.length){
-    res.innerHTML = `<div class="empty">Add your first place below to get started.</div>`;
-  } else if (p){
-    res.innerHTML = `<div class="pick"><div class="name">${esc(p.name)}</div>
-      <div class="tags">${esc(tagLine(p))}</div><div class="why">${esc(why(p))}</div></div>
-      <div class="row" style="margin-bottom:12px">
-        <button class="btn" data-eat="${p.id}">I’m eating here</button>
-        <button class="btn ghost" id="another">Not this one</button></div>`;
-  } else if (!candidates().length){
-    res.innerHTML = `<div class="empty">Nothing matches these choices. Places without a food type, price or distance are left out when you filter on that. Tap Edit on a place to add the missing tags.</div>`;
-  } else {
-    res.innerHTML = `<div class="empty">Choose what you feel like, then tap the button.</div>`;
+/* Google Places (New) */
+function cs(c){ return c === "MYR" ? "RM" : (c ? c + " " : ""); }
+function parsePlace(g){
+  const o = {gid:g.id||"", name:(g.displayName&&g.displayName.text)||"", addr:g.formattedAddress||"",
+    lat:g.location?g.location.latitude:null, lng:g.location?g.location.longitude:null,
+    rating:g.rating||null, kind:(g.primaryTypeDisplayName&&g.primaryTypeDisplayName.text)||"", priceNum:null, priceText:""};
+  const pr = g.priceRange;
+  if (pr && pr.startPrice){
+    const a = Number(pr.startPrice.units||0), b = pr.endPrice ? Number(pr.endPrice.units||a) : null;
+    o.priceText = cs(pr.startPrice.currencyCode) + a + (b !== null && b !== a ? "–" + b : "");
+    o.priceNum = b !== null ? (a+b)/2 : a;
+  } else if (g.priceLevel){
+    const L = {PRICE_LEVEL_FREE:[0,"Free"],PRICE_LEVEL_INEXPENSIVE:[15,"$"],PRICE_LEVEL_MODERATE:[35,"$$"],PRICE_LEVEL_EXPENSIVE:[70,"$$$"],PRICE_LEVEL_VERY_EXPENSIVE:[120,"$$$$"]}[g.priceLevel];
+    if (L){ o.priceNum = L[0]; o.priceText = L[1]; }
   }
-  document.getElementById("suggest").textContent = p ? "Suggest again" : "Suggest something";
+  return o;
+}
+async function gSearch(q, c, radius, n){
+  const r = await fetch("https://places.googleapis.com/v1/places:searchText", {
+    method:"POST",
+    headers:{"Content-Type":"application/json","X-Goog-Api-Key":GKEY,
+      "X-Goog-FieldMask":"places.id,places.displayName,places.formattedAddress,places.location,places.priceLevel,places.priceRange,places.rating,places.primaryTypeDisplayName"},
+    body: JSON.stringify({textQuery:q, maxResultCount:n, locationBias:{circle:{center:{latitude:c.lat,longitude:c.lng},radius}}})
+  });
+  if (!r.ok) throw new Error("Google " + r.status);
+  const j = await r.json();
+  return (j.places || []).map(parsePlace).filter(x => x.name);
+}
+function gerr(e){
+  const m = String(e && e.message || e);
+  if (/403/.test(m)) return "Google rejected the key. Check that billing is on and the key allows this website.";
+  if (/400/.test(m)) return "Google couldn’t read the request. Check that Places API (New) is enabled.";
+  if (/Failed to fetch|NetworkError/i.test(m)) return "No internet connection, or the key is blocked for this website.";
+  return m;
+}
+const toPlace = r => ({id:uid(), name:r.name, meals:[], foods:detectFoods(r.name+" "+r.kind), price:"", priceNum:r.priceNum, priceText:r.priceText,
+  dist:null, lat:r.lat, lng:r.lng, gid:r.gid, rating:r.rating, addr:r.addr, kind:r.kind, base:0, visits:[]});
+const known = r => state.places.some(x => (x.gid && x.gid === r.gid) || x.name.trim().toLowerCase() === r.name.trim().toLowerCase());
 
-  const list = document.getElementById("list");
-  if (!state.places.length){ list.innerHTML = `<div class="empty">Nothing here yet.</div>`; return; }
-  const sorted = [...state.places].sort((a,b) => stats(b).total - stats(a).total);
-  const max = Math.max(1, ...sorted.map(x => stats(x).total));
-  list.innerHTML = sorted.map(x => {
-    const s = stats(x);
-    const last = s.last ? new Date(s.last).toLocaleDateString(undefined,{day:"numeric",month:"short"}) : "never logged";
-    const t = tagLine(x);
-    return `<div class="item"><div style="flex:1;min-width:0">
-      <div class="nm">${esc(x.name)}</div>
-      <div class="meta">${s.total} visit${s.total===1?"":"s"} · last: ${last}${x.meals.length ? " · " + x.meals.join(", ") : ""}</div>
-      ${t ? `<div class="meta">${esc(t)}</div>` : ""}
-      <div class="bar"><i style="width:${Math.round(s.total/max*100)}%"></i></div></div>
-      <button class="btn ghost sm" data-eat="${x.id}" title="Log a visit today">+1</button>
-      <button class="btn ghost sm" data-edit="${x.id}">Edit</button>
-      <button class="x" data-del="${x.id}" aria-label="Remove ${esc(x.name)}">✕</button></div>`;
-  }).join("");
+async function addSimilar(p){
+  const c = (typeof p.lat === "number") ? {lat:p.lat, lng:p.lng} : (loc || BASE);
+  const q = p.kind || (p.foods.includes("Noodles") ? "noodle restaurant" : p.foods.includes("Rice") ? "rice restaurant" : "restaurant");
+  const found = await gSearch(q, c, 3000, 10);
+  const fresh = found.filter(r => !known(r)).slice(0, 3);
+  fresh.forEach(r => state.places.push(toPlace(r)));
+  if (fresh.length){
+    save();
+    notice = {text:"Logged a visit to " + esc(p.name) + ". Added similar places: " + fresh.map(r => esc(r.name)).join(", ") + ".", ids: fresh.map(r => r.gid || r.name)};
+  } else notice = {text:"Logged a visit to " + esc(p.name) + ". No new similar places found nearby."};
+  render();
+}
+async function eat(id){
+  const p = state.places.find(x => x.id === id);
+  if (!p) return;
+  p.visits.push({t:Date.now(), meal:curMeal(), who:f.who});
+  save(); notice = {text:"Logged a visit to " + esc(p.name) + "."}; render();
+  if (GKEY){
+    try{ await addSimilar(p); }
+    catch(e){ notice = {text:"Logged a visit to " + esc(p.name) + ". Couldn’t look up similar places: " + esc(gerr(e))}; render(); }
+  }
 }
 
-const $ = id => document.getElementById(id);
-function checks(name){ return [...document.querySelectorAll(`#${name} input:checked`)].map(i => i.value); }
-function setChecks(name, vals){ document.querySelectorAll(`#${name} input`).forEach(i => i.checked = vals.includes(i.value)); }
+function itemRow(p, withBtn){
+  return `<div class="item"><div style="flex:1;min-width:0"><div class="nm">${esc(p.name)}</div>
+    <div class="meta">${esc(tagLine(p))}</div><div class="meta">${esc(visitLine(p))}</div></div>
+    <button class="btn sm" data-eat="${p.id}" title="Log a visit">+1</button>${withBtn ? `<button class="btn ghost sm" data-edit="${p.id}">Edit</button><button class="x" data-del="${p.id}" aria-label="Remove ${esc(p.name)}">✕</button>` : ""}</div>`;
+}
+function render(){
+  $("filters").innerHTML = FILTERS.map(g =>
+    `<div class="fl">${g.label}</div><div class="chips">` +
+    g.opts.map(o => `<button class="chip ${f[g.k]===o?"on":""}" data-f="${g.k}" data-v="${esc(o)}">${o==="Auto" ? "Auto · " + autoMeal() : esc(o)}</button>`).join("") + `</div>`).join("");
+  $("locLine").innerHTML = loc ? "📍 Distances are from your current location."
+    : `📍 Distances are from MSN Bukit Jalil (approx.). <button class="btn ghost sm" id="myloc">Use my location</button>`;
+  $("gsearch").hidden = !GKEY; $("gnote").hidden = !!GKEY; $("enrich").hidden = !GKEY;
+
+  let html = notice ? `<div class="note">${notice.text}${notice.ids ? ` <button class="btn ghost sm" data-undo="1">Undo</button>` : ""}</div>` : "";
+  if (!state.places.length) html += `<div class="empty">Add your first place below to get started.</div>`;
+  else if (!shown) html += `<div class="empty">Choose what you feel like, then tap Suggest places.</div>`;
+  else {
+    const h = hits();
+    if (!h.length) html += `<div class="empty">No saved places match these choices. Places without a price, distance or food type are left out when you filter on that. Tap Edit to fill them in${GKEY ? ", or use Fill in from Google" : ""}.</div>`;
+    else html += `<div class="meta" style="margin:12px 0 2px;color:var(--mute)">${h.length} place${h.length===1?"":"s"} for ${curMeal().toLowerCase()}, cheapest first</div>` + h.map(p => itemRow(p, false)).join("");
+  }
+  $("result").innerHTML = html;
+
+  const list = $("list");
+  if (!state.places.length){ list.innerHTML = `<div class="empty">Nothing here yet.</div>`; return; }
+  list.innerHTML = [...state.places].sort((a,b) => stats(b).total - stats(a).total).map(p => itemRow(p, true)).join("");
+}
+
+function checks(n){ return [...document.querySelectorAll(`#${n} input:checked`)].map(i => i.value); }
+function setChecks(n, vals){ document.querySelectorAll(`#${n} input`).forEach(i => i.checked = vals.includes(i.value)); }
 function resetForm(){
-  editing = null;
-  $("name").value = ""; $("base").value = ""; $("dist").value = ""; $("price").value = "";
+  editing = null; pending = null; gres = [];
+  ["name","base","dist","price"].forEach(i => $(i).value = "");
+  $("gres").innerHTML = ""; $("hereMsg").textContent = "";
   setChecks("mealChecks", []); setChecks("foodChecks", []);
   $("add").textContent = "Add place"; $("formTitle").textContent = "Add a place"; $("cancel").hidden = true;
 }
+function renderGres(){
+  $("gres").innerHTML = gres.length ? gres.map((r,i) => `<div class="item"><div style="flex:1;min-width:0"><div class="nm">${esc(r.name)}</div>
+    <div class="meta">${esc([r.priceText, r.rating ? "★"+r.rating : "", r.addr].filter(Boolean).join(" · "))}</div></div>
+    <button class="btn sm" data-use="${i}">Use this</button></div>`).join("") : `<div class="meta">No results.</div>`;
+}
+async function gsearch(){
+  const q = $("name").value.trim();
+  if (!q){ $("name").focus(); return; }
+  $("gres").innerHTML = `<div class="meta">Searching…</div>`;
+  try{ await getLoc(); gres = await gSearch(q, loc || BASE, 15000, 5); renderGres(); render(); }
+  catch(e){ $("gres").innerHTML = `<div class="meta">${esc(gerr(e))}</div>`; }
+}
+async function enrichAll(){
+  const todo = state.places.filter(p => !p.gid);
+  if (!todo.length){ notice = {text:"All your places already have Google details."}; render(); return; }
+  notice = {text:"Looking up " + todo.length + " place" + (todo.length===1?"":"s") + "…"}; render();
+  await getLoc();
+  let n = 0;
+  for (const p of todo){
+    try{
+      const r = (await gSearch(p.name, loc || BASE, 20000, 3)).find(x => {
+        const a = x.name.toLowerCase(), b = p.name.toLowerCase();
+        return a.includes(b.split(" ")[0]) || b.includes(a.split(" ")[0]);
+      });
+      if (!r) continue;
+      Object.assign(p, {gid:r.gid, lat:r.lat, lng:r.lng, rating:r.rating, addr:r.addr, kind:r.kind});
+      if (r.priceNum !== null){ p.priceNum = r.priceNum; p.priceText = r.priceText; p.price = ""; }
+      if (!p.foods.length) p.foods = detectFoods(r.name + " " + r.kind);
+      n++;
+    }catch(e){ notice = {text:"Stopped: " + esc(gerr(e))}; render(); save(); return; }
+  }
+  save(); notice = {text:"Filled in details for " + n + " of " + todo.length + " places."}; render();
+}
 
-document.addEventListener("click", e => {
+document.addEventListener("click", async e => {
   const t = e.target.closest("button");
   if (!t) return;
-  if (t.dataset.f){ f[t.dataset.f] = t.dataset.v; skipped.clear(); current = null; render(); }
-  else if (t.dataset.eat){ logVisit(t.dataset.eat); current = null; render(); }
+  if (t.dataset.f){ f[t.dataset.f] = t.dataset.v; render(); }
+  else if (t.dataset.eat){ eat(t.dataset.eat); }
+  else if (t.dataset.undo){
+    if (notice && notice.ids){
+      state.places = state.places.filter(p => !(p.visits.length === 0 && notice.ids.includes(p.gid || p.name)));
+      save(); notice = {text:"Removed the similar places that were just added."}; render();
+    }
+  }
+  else if (t.dataset.use){
+    const r = gres[Number(t.dataset.use)]; if (!r) return;
+    pending = r; $("name").value = r.name; $("price").value = r.priceNum === null ? "" : r.priceNum;
+    setChecks("foodChecks", detectFoods(r.name + " " + r.kind));
+    gres = []; $("gres").innerHTML = `<div class="meta">Selected: ${esc(r.name)}${r.priceText ? " · " + esc(r.priceText) : ""}. Tap Add place to save.</div>`;
+  }
   else if (t.dataset.edit){
-    const p = state.places.find(x => x.id === t.dataset.edit);
-    if (!p) return;
-    editing = p.id;
-    $("name").value = p.name; $("base").value = p.base || ""; $("price").value = p.price || "";
+    const p = state.places.find(x => x.id === t.dataset.edit); if (!p) return;
+    editing = p.id; pending = {gid:p.gid,lat:p.lat,lng:p.lng,rating:p.rating,addr:p.addr,kind:p.kind,priceNum:p.priceNum,priceText:p.priceText};
+    $("name").value = p.name; $("base").value = p.base || ""; $("price").value = typeof p.priceNum === "number" ? p.priceNum : "";
     $("dist").value = p.dist === null ? "" : p.dist;
     setChecks("mealChecks", p.meals); setChecks("foodChecks", p.foods);
     $("add").textContent = "Save changes"; $("formTitle").textContent = "Edit place"; $("cancel").hidden = false;
@@ -447,29 +566,33 @@ document.addEventListener("click", e => {
     const p = state.places.find(x => x.id === t.dataset.del);
     if (p && confirm("Remove " + p.name + " and its history?")){
       state.places = state.places.filter(x => x.id !== p.id);
-      if (current === p.id) current = null;
       if (editing === p.id) resetForm();
       save(); render();
     }
   }
-  else if (t.id === "another"){ skipped.add(current); suggest(); }
-  else if (t.id === "suggest"){ if (current) skipped.add(current); suggest(); }
+  else if (t.id === "suggest"){ shown = true; notice = null; render(); await getLoc(); render(); }
+  else if (t.id === "myloc"){ await getLoc(); if (!loc) alert("Couldn’t get your location. Allow location access for this site in your browser settings."); render(); }
+  else if (t.id === "here"){
+    await getLoc();
+    if (!loc){ alert("Couldn’t get your location. Allow location access for this site in your browser settings."); return; }
+    pending = Object.assign({}, pending || {}, {lat:loc.lat, lng:loc.lng});
+    $("hereMsg").textContent = "Location saved. Tap " + $("add").textContent + ".";
+  }
+  else if (t.id === "gsearch"){ gsearch(); }
+  else if (t.id === "enrich"){ enrichAll(); }
   else if (t.id === "cancel"){ resetForm(); }
   else if (t.id === "add"){
     const name = $("name").value.trim();
     if (!name){ $("name").focus(); return; }
     if (state.places.some(p => p.id !== editing && p.name.toLowerCase() === name.toLowerCase())){ alert("That place is already in your list."); return; }
-    const d = parseFloat($("dist").value);
-    const data = {
-      name, meals: checks("mealChecks"), foods: checks("foodChecks"), price: $("price").value,
-      dist: isNaN(d) ? null : d, base: Math.max(0, parseInt($("base").value, 10) || 0)
-    };
-    if (editing){
-      const p = state.places.find(x => x.id === editing);
-      if (p) Object.assign(p, data);
-    } else {
-      state.places.push({id: uid(), visits: [], ...data});
-    }
+    const pv = $("price").value.trim(), pn = pv === "" ? null : Number(pv), d = parseFloat($("dist").value);
+    const data = {name, meals:checks("mealChecks"), foods:checks("foodChecks"), priceNum:(pn===null||isNaN(pn))?null:pn,
+      dist:isNaN(d)?null:d, base:Math.max(0, parseInt($("base").value, 10) || 0)};
+    data.priceText = (pending && pending.priceText && data.priceNum === pending.priceNum) ? pending.priceText : "";
+    if (data.priceNum !== null) data.price = "";
+    if (pending) Object.assign(data, {gid:pending.gid||"", lat:typeof pending.lat==="number"?pending.lat:null, lng:typeof pending.lng==="number"?pending.lng:null, rating:pending.rating||null, addr:pending.addr||"", kind:pending.kind||""});
+    if (editing){ const p = state.places.find(x => x.id === editing); if (p) Object.assign(p, data); }
+    else state.places.push({id:uid(), visits:[], price:"", ...data});
     save(); resetForm(); render();
   }
 });
@@ -490,7 +613,7 @@ $("restore").addEventListener("change", async e => {
     const s = normalise(JSON.parse(await file.text()));
     if (!s) throw new Error("bad");
     if (!confirm("Replace your current places with this backup?")) { e.target.value = ""; return; }
-    state = s; save(); current = null; skipped.clear(); render();
+    state = s; save(); render();
   }catch(err){ alert("That file isn’t a valid backup."); }
   e.target.value = "";
 });
@@ -502,6 +625,7 @@ $("syOut").addEventListener("click", () => { if (sync.auth) sync.auth.signOut();
 render();
 initSync();
 initInstall();
+getLoc().then(render);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>
 </body>
