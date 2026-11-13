@@ -114,17 +114,24 @@ h2{font-size:1.05rem;margin:0 0 10px}
       <input type="text" id="name" placeholder="e.g. Delish Food Village">
       <button class="btn ghost" id="gsearch" hidden style="white-space:nowrap">Search Google</button>
     </div>
-    <div id="gnote" class="meta" style="color:var(--mute);font-size:.85rem;margin-top:6px" hidden>Google search isn’t switched on yet. Add your key in <code>google-config.js</code> to fill in price and location automatically.</div>
+    <div id="gnote" class="meta" style="color:var(--mute);font-size:.85rem;margin-top:6px" hidden>Automatic Google lookup isn’t switched on yet. Use the button below to check on Google yourself, or add your key in <code>google-config.js</code> to fill in price, area and hours automatically.</div>
+    <div class="row" style="margin-top:8px"><button class="btn ghost sm" id="gopen">Check price, area &amp; hours on Google</button></div>
     <div id="gres"></div>
     <label class="lbl">Usually for (leave empty for any meal)</label>
     <div id="mealChecks"></div>
     <label class="lbl">Food type</label>
     <div id="foodChecks"></div>
     <div class="two">
-      <div><label class="lbl" for="price">Price per person (RM)</label>
-        <input type="number" id="price" min="0" step="0.5" placeholder="e.g. 15"></div>
+      <div><label class="lbl" for="price">Price per person (RM): a number or a range</label>
+        <input type="text" id="price" autocomplete="off" placeholder="e.g. 15 or 10-20"></div>
       <div><label class="lbl" for="dist">Distance in km (only if no Google location)</label>
         <input type="number" id="dist" min="0" step="0.5" placeholder="e.g. 2.5"></div>
+    </div>
+    <div class="two">
+      <div><label class="lbl" for="areaIn">Area</label>
+        <input type="text" id="areaIn" autocomplete="off" placeholder="e.g. Bukit Jalil"></div>
+      <div><label class="lbl" for="hoursIn">Opening hours (optional)</label>
+        <input type="text" id="hoursIn" autocomplete="off" placeholder="e.g. 8am-10pm"></div>
     </div>
     <div class="row" style="margin-top:8px"><button class="btn ghost sm" id="here">I’m at this place now: save my location</button><span class="meta" id="hereMsg" style="color:var(--mute)"></span></div>
     <label class="lbl" for="base">Roughly how many times have you been before? (optional)</label>
@@ -175,7 +182,7 @@ const FILTERS = [
 function normalise(s){
   if (s && Array.isArray(s.places)){
     return {places: s.places.map(p => {
-      const q = {foods:[],price:"",priceNum:null,priceText:"",dist:null,lat:null,lng:null,gid:"",rating:null,addr:"",kind:"",base:0,meals:[],visits:[],...p};
+      const q = {foods:[],price:"",priceNum:null,priceText:"",dist:null,lat:null,lng:null,gid:"",rating:null,addr:"",kind:"",area:"",hours:[],hoursText:"",base:0,meals:[],visits:[],...p};
       q.foods = q.foods.map(x => x === "Other" ? "Others" : x);
       return q;
     })};
@@ -188,7 +195,7 @@ function load(){
 }
 let state = load();
 let f = {meal:"Auto", food:"Any", budget:"Any", dist:"Any", who:"Alone"};
-let shown = false, notice = null, editing = null, pending = null, gres = [], loc = null;
+let shown = false, notice = null, editing = null, pending = null, gres = [], loc = null, priceOrig = null;
 const uid = () => Math.random().toString(36).slice(2,9);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
@@ -225,6 +232,9 @@ function mergeStates(a, b){
     if (q.dist === null || q.dist === "") q.dist = p.dist;
     if (q.priceNum === null || q.priceNum === undefined){ q.priceNum = p.priceNum; q.priceText = p.priceText; }
     if (q.lat === null || q.lat === undefined){ q.lat = p.lat; q.lng = p.lng; q.gid = p.gid; q.rating = p.rating; q.addr = p.addr; q.kind = p.kind; }
+    if (!q.area) q.area = p.area;
+    if ((!q.hours || !q.hours.length) && p.hours) q.hours = p.hours;
+    if (!q.hoursText) q.hoursText = p.hoursText;
   });
   return {places: [...map.values()]};
 }
@@ -348,6 +358,27 @@ function priceLabel(p){
   if (typeof p.priceNum === "number") return "RM" + p.priceNum;
   return p.price ? p.price + " price" : "";
 }
+function parsePrice(v){
+  v = String(v).replace(/rm|myr/ig, "").replace(/,/g, "").trim();
+  if (!v) return {num:null, text:""};
+  let m = v.match(/^(\d+(?:\.\d+)?)\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?)$/i);
+  if (m){ let a = +m[1], b = +m[2]; if (a > b) [a, b] = [b, a]; return {num:(a+b)/2, text:"RM" + a + (b !== a ? "–" + b : "")}; }
+  m = v.match(/^(\d+(?:\.\d+)?)$/);
+  return m ? {num:+m[1], text:""} : null;
+}
+function priceField(p){
+  if (p.priceText && /^RM/.test(p.priceText)) return p.priceText.replace(/^RM\s*/, "");
+  return typeof p.priceNum === "number" ? String(p.priceNum) : "";
+}
+function setPrice(p){
+  const v = priceField(p); $("price").value = v;
+  priceOrig = {v, num: typeof p.priceNum === "number" ? p.priceNum : null, text: p.priceText || ""};
+}
+function todayHours(p){
+  if (p.hoursText) return p.hoursText;
+  if (p.hours && p.hours.length) return (p.hours[(new Date().getDay() + 6) % 7] || "").replace(/^[^:]+:\s*/, "");
+  return "";
+}
 function hav(a, b){
   const R = 6371, r = x => x*Math.PI/180;
   const dLat = r(b.lat-a.lat), dLng = r(b.lng-a.lng);
@@ -377,6 +408,7 @@ function tagLine(p){
   const b = [], d = distKm(p);
   if (priceLabel(p)) b.push(priceLabel(p));
   if (d !== null) b.push(d.toFixed(1) + " km");
+  if (p.area) b.push(p.area);
   if (p.foods.length) b.push(p.foods.join("/"));
   if (p.rating) b.push("★" + p.rating);
   return b.join(" · ");
@@ -409,6 +441,10 @@ function parsePlace(g){
   const o = {gid:g.id||"", name:(g.displayName&&g.displayName.text)||"", addr:g.formattedAddress||"",
     lat:g.location?g.location.latitude:null, lng:g.location?g.location.longitude:null,
     rating:g.rating||null, kind:(g.primaryTypeDisplayName&&g.primaryTypeDisplayName.text)||"", priceNum:null, priceText:""};
+  const comp = g.addressComponents || [];
+  const pick = t => { const c = comp.find(x => (x.types || []).includes(t)); return c ? c.longText : ""; };
+  o.area = pick("sublocality_level_1") || pick("sublocality") || pick("neighborhood") || pick("locality") || g.shortFormattedAddress || "";
+  o.hours = (g.regularOpeningHours && g.regularOpeningHours.weekdayDescriptions) || [];
   const pr = g.priceRange;
   if (pr && pr.startPrice){
     const a = Number(pr.startPrice.units||0), b = pr.endPrice ? Number(pr.endPrice.units||a) : null;
@@ -424,7 +460,7 @@ async function gSearch(q, c, radius, n){
   const r = await fetch("https://places.googleapis.com/v1/places:searchText", {
     method:"POST",
     headers:{"Content-Type":"application/json","X-Goog-Api-Key":GKEY,
-      "X-Goog-FieldMask":"places.id,places.displayName,places.formattedAddress,places.location,places.priceLevel,places.priceRange,places.rating,places.primaryTypeDisplayName"},
+      "X-Goog-FieldMask":"places.id,places.displayName,places.formattedAddress,places.location,places.priceLevel,places.priceRange,places.rating,places.primaryTypeDisplayName,places.addressComponents,places.shortFormattedAddress,places.regularOpeningHours"},
     body: JSON.stringify({textQuery:q, maxResultCount:n, locationBias:{circle:{center:{latitude:c.lat,longitude:c.lng},radius}}})
   });
   if (!r.ok) throw new Error("Google " + r.status);
@@ -439,7 +475,7 @@ function gerr(e){
   return m;
 }
 const toPlace = r => ({id:uid(), name:r.name, meals:[], foods:detectFoods(r.name+" "+r.kind), price:"", priceNum:r.priceNum, priceText:r.priceText,
-  dist:null, lat:r.lat, lng:r.lng, gid:r.gid, rating:r.rating, addr:r.addr, kind:r.kind, base:0, visits:[]});
+  dist:null, lat:r.lat, lng:r.lng, gid:r.gid, rating:r.rating, addr:r.addr, kind:r.kind, area:r.area||"", hours:r.hours||[], hoursText:"", base:0, visits:[]});
 const known = r => state.places.some(x => (x.gid && x.gid === r.gid) || x.name.trim().toLowerCase() === r.name.trim().toLowerCase());
 
 async function addSimilar(p){
@@ -467,7 +503,7 @@ async function eat(id){
 
 function itemRow(p, withBtn){
   return `<div class="item"><div style="flex:1;min-width:0"><div class="nm">${esc(p.name)}</div>
-    <div class="meta">${esc(tagLine(p))}</div><div class="meta">${esc(visitLine(p))}</div></div>
+    <div class="meta">${esc(tagLine(p))}</div>${todayHours(p) ? `<div class="meta">Today: ${esc(todayHours(p))}</div>` : ""}<div class="meta">${esc(visitLine(p))}</div></div>
     <button class="btn sm" data-eat="${p.id}" title="Log a visit">+1</button>${withBtn ? `<button class="btn ghost sm" data-edit="${p.id}">Edit</button><button class="x" data-del="${p.id}" aria-label="Remove ${esc(p.name)}">✕</button>` : ""}</div>`;
 }
 function render(){
@@ -496,15 +532,15 @@ function render(){
 function checks(n){ return [...document.querySelectorAll(`#${n} input:checked`)].map(i => i.value); }
 function setChecks(n, vals){ document.querySelectorAll(`#${n} input`).forEach(i => i.checked = vals.includes(i.value)); }
 function resetForm(){
-  editing = null; pending = null; gres = [];
-  ["name","base","dist","price"].forEach(i => $(i).value = "");
+  editing = null; pending = null; gres = []; priceOrig = null;
+  ["name","base","dist","price","areaIn","hoursIn"].forEach(i => $(i).value = "");
   $("gres").innerHTML = ""; $("hereMsg").textContent = "";
   setChecks("mealChecks", []); setChecks("foodChecks", []);
   $("add").textContent = "Add place"; $("formTitle").textContent = "Add a place"; $("cancel").hidden = true;
 }
 function renderGres(){
   $("gres").innerHTML = gres.length ? gres.map((r,i) => `<div class="item"><div style="flex:1;min-width:0"><div class="nm">${esc(r.name)}</div>
-    <div class="meta">${esc([r.priceText, r.rating ? "★"+r.rating : "", r.addr].filter(Boolean).join(" · "))}</div></div>
+    <div class="meta">${esc([r.priceText, r.rating ? "★"+r.rating : "", r.area, todayHours({hours:r.hours}) ? "Today: " + todayHours({hours:r.hours}) : "", r.addr].filter(Boolean).join(" · "))}</div></div>
     <button class="btn sm" data-use="${i}">Use this</button></div>`).join("") : `<div class="meta">No results.</div>`;
 }
 async function gsearch(){
@@ -515,7 +551,7 @@ async function gsearch(){
   catch(e){ $("gres").innerHTML = `<div class="meta">${esc(gerr(e))}</div>`; }
 }
 async function enrichAll(){
-  const todo = state.places.filter(p => !p.gid);
+  const todo = state.places.filter(p => !p.gid || (!p.area && !(p.hours && p.hours.length)));
   if (!todo.length){ notice = {text:"All your places already have Google details."}; render(); return; }
   notice = {text:"Looking up " + todo.length + " place" + (todo.length===1?"":"s") + "…"}; render();
   await getLoc();
@@ -528,6 +564,8 @@ async function enrichAll(){
       });
       if (!r) continue;
       Object.assign(p, {gid:r.gid, lat:r.lat, lng:r.lng, rating:r.rating, addr:r.addr, kind:r.kind});
+      if (r.area) p.area = r.area;
+      if (r.hours && r.hours.length) p.hours = r.hours;
       if (r.priceNum !== null){ p.priceNum = r.priceNum; p.priceText = r.priceText; p.price = ""; }
       if (!p.foods.length) p.foods = detectFoods(r.name + " " + r.kind);
       n++;
@@ -549,14 +587,14 @@ document.addEventListener("click", async e => {
   }
   else if (t.dataset.use){
     const r = gres[Number(t.dataset.use)]; if (!r) return;
-    pending = r; $("name").value = r.name; $("price").value = r.priceNum === null ? "" : r.priceNum;
+    pending = r; $("name").value = r.name; setPrice(r); $("areaIn").value = r.area || ""; $("hoursIn").value = "";
     setChecks("foodChecks", detectFoods(r.name + " " + r.kind));
     gres = []; $("gres").innerHTML = `<div class="meta">Selected: ${esc(r.name)}${r.priceText ? " · " + esc(r.priceText) : ""}. Tap Add place to save.</div>`;
   }
   else if (t.dataset.edit){
     const p = state.places.find(x => x.id === t.dataset.edit); if (!p) return;
-    editing = p.id; pending = {gid:p.gid,lat:p.lat,lng:p.lng,rating:p.rating,addr:p.addr,kind:p.kind,priceNum:p.priceNum,priceText:p.priceText};
-    $("name").value = p.name; $("base").value = p.base || ""; $("price").value = typeof p.priceNum === "number" ? p.priceNum : "";
+    editing = p.id; pending = {gid:p.gid,lat:p.lat,lng:p.lng,rating:p.rating,addr:p.addr,kind:p.kind,priceNum:p.priceNum,priceText:p.priceText,hours:p.hours||[]};
+    $("name").value = p.name; $("base").value = p.base || ""; setPrice(p); $("areaIn").value = p.area || ""; $("hoursIn").value = p.hoursText || "";
     $("dist").value = p.dist === null ? "" : p.dist;
     setChecks("mealChecks", p.meals); setChecks("foodChecks", p.foods);
     $("add").textContent = "Save changes"; $("formTitle").textContent = "Edit place"; $("cancel").hidden = false;
@@ -578,6 +616,11 @@ document.addEventListener("click", async e => {
     pending = Object.assign({}, pending || {}, {lat:loc.lat, lng:loc.lng});
     $("hereMsg").textContent = "Location saved. Tap " + $("add").textContent + ".";
   }
+  else if (t.id === "gopen"){
+    const n = $("name").value.trim();
+    if (!n){ $("name").focus(); return; }
+    window.open("https://www.google.com/search?q=" + encodeURIComponent(n + " price range opening hours"), "_blank", "noopener");
+  }
   else if (t.id === "gsearch"){ gsearch(); }
   else if (t.id === "enrich"){ enrichAll(); }
   else if (t.id === "cancel"){ resetForm(); }
@@ -585,14 +628,21 @@ document.addEventListener("click", async e => {
     const name = $("name").value.trim();
     if (!name){ $("name").focus(); return; }
     if (state.places.some(p => p.id !== editing && p.name.toLowerCase() === name.toLowerCase())){ alert("That place is already in your list."); return; }
-    const pv = $("price").value.trim(), pn = pv === "" ? null : Number(pv), d = parseFloat($("dist").value);
-    const data = {name, meals:checks("mealChecks"), foods:checks("foodChecks"), priceNum:(pn===null||isNaN(pn))?null:pn,
+    const raw = $("price").value.trim(); let pnum, ptext;
+    if (priceOrig && raw === priceOrig.v){ pnum = priceOrig.num; ptext = priceOrig.text; }
+    else {
+      const pp = parsePrice(raw);
+      if (!pp){ alert("Enter the price as a number like 15, or a range like 10-20."); $("price").focus(); return; }
+      pnum = pp.num; ptext = pp.text;
+    }
+    const d = parseFloat($("dist").value);
+    const data = {name, meals:checks("mealChecks"), foods:checks("foodChecks"), priceNum:pnum, priceText:ptext,
+      area:$("areaIn").value.trim(), hoursText:$("hoursIn").value.trim(),
       dist:isNaN(d)?null:d, base:Math.max(0, parseInt($("base").value, 10) || 0)};
-    data.priceText = (pending && pending.priceText && data.priceNum === pending.priceNum) ? pending.priceText : "";
-    if (data.priceNum !== null) data.price = "";
-    if (pending) Object.assign(data, {gid:pending.gid||"", lat:typeof pending.lat==="number"?pending.lat:null, lng:typeof pending.lng==="number"?pending.lng:null, rating:pending.rating||null, addr:pending.addr||"", kind:pending.kind||""});
+    if (pnum !== null) data.price = "";
+    if (pending) Object.assign(data, {gid:pending.gid||"", lat:typeof pending.lat==="number"?pending.lat:null, lng:typeof pending.lng==="number"?pending.lng:null, rating:pending.rating||null, addr:pending.addr||"", kind:pending.kind||"", hours:Array.isArray(pending.hours)?pending.hours:[]});
     if (editing){ const p = state.places.find(x => x.id === editing); if (p) Object.assign(p, data); }
-    else state.places.push({id:uid(), visits:[], price:"", ...data});
+    else state.places.push({id:uid(), visits:[], price:"", hours:[], ...data});
     save(); resetForm(); render();
   }
 });
