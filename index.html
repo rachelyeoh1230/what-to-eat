@@ -58,6 +58,7 @@ h2{font-size:1.05rem;margin:0 0 10px}
 .install p{margin:0 0 4px}
 .note{background:var(--soft);border-radius:10px;padding:10px 12px;margin:10px 0;font-size:.92rem}
 .hit{padding:12px 0}
+.grp{font-weight:700;font-size:.95rem;margin:16px 0 0}
 </style>
 </head>
 <body>
@@ -129,7 +130,8 @@ h2{font-size:1.05rem;margin:0 0 10px}
     </div>
     <div class="two">
       <div><label class="lbl" for="areaIn">Area</label>
-        <input type="text" id="areaIn" autocomplete="off" placeholder="e.g. Bukit Jalil"></div>
+        <input type="text" id="areaIn" autocomplete="off" placeholder="e.g. Bukit Jalil">
+        <div class="chips" id="areaSug" style="margin-top:6px"></div></div>
       <div><label class="lbl" for="hoursIn">Opening hours (optional)</label>
         <input type="text" id="hoursIn" autocomplete="off" placeholder="e.g. 8am-10pm"></div>
     </div>
@@ -166,19 +168,12 @@ const KEY = "what-to-eat-v1";
 const GKEY = window.GOOGLE_PLACES_KEY || "";
 const $ = id => document.getElementById(id);
 const MEALS = ["Breakfast","Lunch","Dinner","Supper","Snack","Dessert"];
-const FOODS = ["Rice","Noodles","Others"];
+const FOODS = ["Rice","Noodles","Pasta","Hotpot","Soup","Food court","Others"];
+const HOT = ["Soup","Hotpot"];
 const WHO = ["Alone","Friends","Family","Colleagues"];
-const BUDGETS = {"Low (≤ RM15)":15,"Medium (≤ RM35)":35};
-const DISTS = {"≤ 2 km":2,"≤ 5 km":5,"≤ 10 km":10};
+const BUDGETS = {"Low (RM1–20)":"Low","Medium (RM20–40)":"Medium","High (above RM40)":"High"};
 const BASE = {lat:3.0545, lng:101.6915};
 const LEGACY = {Low:12, Medium:25, High:50};
-const FILTERS = [
-  {k:"meal",label:"Meal (Auto follows your clock)",opts:["Auto",...MEALS]},
-  {k:"food",label:"Feeling like",opts:["Any",...FOODS]},
-  {k:"budget",label:"Budget",opts:["Any",...Object.keys(BUDGETS)]},
-  {k:"dist",label:"Nearby",opts:["Any",...Object.keys(DISTS)]},
-  {k:"who",label:"Eating with",opts:WHO}
-];
 function normalise(s){
   if (s && Array.isArray(s.places)){
     return {places: s.places.map(p => {
@@ -194,7 +189,7 @@ function load(){
   return {places:[]};
 }
 let state = load();
-let f = {meal:"Auto", food:"Any", budget:"Any", dist:"Any", who:"Alone"};
+let f = {meal:"Auto", food:[], budget:"Any", area:"Any", who:"Alone"};
 let shown = false, notice = null, editing = null, pending = null, gres = [], loc = null, priceOrig = null;
 const uid = () => Math.random().toString(36).slice(2,9);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -379,6 +374,67 @@ function todayHours(p){
   if (p.hours && p.hours.length) return (p.hours[(new Date().getDay() + 6) % 7] || "").replace(/^[^:]+:\s*/, "");
   return "";
 }
+const tierOf = p => { const v = priceVal(p); return v === null ? "" : v <= 20 ? "Low" : v <= 40 ? "Medium" : "High"; };
+const aKey = a => (a || "").trim().toLowerCase().replace(/\s+/g, " ");
+function lev(a, b){
+  const row = Array.from({length:b.length+1}, (_, j) => j);
+  for (let i = 1; i <= a.length; i++){
+    let prev = row[0]; row[0] = i;
+    for (let j = 1; j <= b.length; j++){
+      const tmp = row[j];
+      row[j] = Math.min(row[j]+1, row[j-1]+1, prev + (a[i-1] === b[j-1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return row[b.length];
+}
+function areaList(){
+  const m = new Map();
+  state.places.forEach(p => {
+    const k = aKey(p.area); if (!k) return;
+    let e = m.get(k); if (!e){ e = {key:k, names:{}, pts:[], man:[]}; m.set(k, e); }
+    const n = p.area.trim(); e.names[n] = (e.names[n] || 0) + 1;
+    if (typeof p.lat === "number" && typeof p.lng === "number") e.pts.push(p);
+    else if (p.dist !== null && p.dist !== "" && p.dist !== undefined) e.man.push(Number(p.dist));
+  });
+  return [...m.values()].map(e => {
+    const label = Object.entries(e.names).sort((a, b) => b[1] - a[1])[0][0];
+    let km = null;
+    if (e.pts.length){
+      const c = {lat:e.pts.reduce((t, p) => t + p.lat, 0) / e.pts.length, lng:e.pts.reduce((t, p) => t + p.lng, 0) / e.pts.length};
+      km = hav(loc || BASE, c);
+    } else if (e.man.length && !loc) km = Math.min(...e.man);
+    return {key:e.key, label, km};
+  }).sort((a, b) => ((a.km === null) - (b.km === null)) || (a.km - b.km) || a.label.localeCompare(b.label));
+}
+function areaSuggestions(typed){
+  const tk = aKey(typed), list = areaList();
+  if (!tk) return {title:"Saved areas", items:list.slice(0, 6).map(a => a.label)};
+  return {title:"Did you mean", items:list.filter(a => {
+    if (a.key === tk) return a.label !== typed.trim();
+    return a.key.includes(tk) || tk.includes(a.key) || lev(a.key, tk) <= Math.max(1, Math.floor(Math.min(a.key.length, tk.length) / 4));
+  }).map(a => a.label)};
+}
+function renderAreaSug(){
+  const el = $("areaSug"); if (!el) return;
+  const r = areaSuggestions($("areaIn").value);
+  el.innerHTML = r.items.length ? `<span class="meta" style="color:var(--mute);align-self:center">${r.title}:</span>` +
+    r.items.map(x => `<button class="chip" data-area="${esc(x)}">${esc(x)}</button>`).join("") : "";
+}
+const chipHtml = (k, v, label, on) => `<button class="chip ${on ? "on" : ""}" data-f="${k}" data-v="${esc(v)}">${esc(label)}</button>`;
+function filtersHtml(){
+  const ars = areaList();
+  if (f.area !== "Any" && !ars.some(a => a.key === f.area)) f.area = "Any";
+  const grp = (label, inner) => `<div class="fl">${label}</div><div class="chips">${inner}</div>`;
+  return grp("Meal (Auto follows your clock)", ["Auto", ...MEALS].map(o => chipHtml("meal", o, o === "Auto" ? "Auto · " + autoMeal() : o, f.meal === o)).join("")) +
+    grp("Feeling like (pick one or more)", chipHtml("food", "Any", "Any", !f.food.length) +
+      chipHtml("food", "__hot", "Something hot", HOT.every(x => f.food.includes(x))) +
+      FOODS.map(o => chipHtml("food", o, o, f.food.includes(o))).join("")) +
+    grp("Budget", ["Any", ...Object.keys(BUDGETS)].map(o => chipHtml("budget", o, o, f.budget === o)).join("")) +
+    grp("Area (nearest first)", chipHtml("area", "Any", "Any", f.area === "Any") +
+      ars.map(a => chipHtml("area", a.key, a.label + (a.km !== null ? " · " + a.km.toFixed(1) + " km" : ""), f.area === a.key)).join("")) +
+    grp("Eating with", WHO.map(o => chipHtml("who", o, o, f.who === o)).join(""));
+}
 function hav(a, b){
   const R = 6371, r = x => x*Math.PI/180;
   const dLat = r(b.lat-a.lat), dLng = r(b.lng-a.lng);
@@ -400,13 +456,17 @@ function getLoc(){
 }
 function detectFoods(t){
   const o = [];
-  if (/\brice\b|nasi|biryani|bak kut teh|claypot|donburi|economy rice/i.test(t)) o.push("Rice");
-  if (/noodle|\bmee\b|\bmi\b|ramen|\bpho\b|laksa|udon|soba|kuey|kway|kuay|bihun|mihun|pasta|spaghetti|wantan|wonton/i.test(t)) o.push("Noodles");
+  if (/\brice\b|nasi|biryani|claypot|donburi|economy rice/i.test(t)) o.push("Rice");
+  if (/noodle|\bmee\b|\bmi\b|ramen|\bpho\b|laksa|udon|soba|kuey|kway|kuay|bihun|mihun|wantan|wonton/i.test(t)) o.push("Noodles");
+  if (/pasta|spaghetti|carbonara|lasagn/i.test(t)) o.push("Pasta");
+  if (/hot ?pot|steamboat|shabu|suki|mala/i.test(t)) o.push("Hotpot");
+  if (/\bsoup\b|\bsup\b|bak kut teh|tom yum|soto/i.test(t)) o.push("Soup");
+  if (/food court|food village|hawker|medan selera|gerai/i.test(t)) o.push("Food court");
   return o.length ? o : ["Others"];
 }
 function tagLine(p){
   const b = [], d = distKm(p);
-  if (priceLabel(p)) b.push(priceLabel(p));
+  if (priceLabel(p)) b.push(priceLabel(p) + (tierOf(p) ? " · " + tierOf(p) : ""));
   if (d !== null) b.push(d.toFixed(1) + " km");
   if (p.area) b.push(p.area);
   if (p.foods.length) b.push(p.foods.join("/"));
@@ -415,13 +475,16 @@ function tagLine(p){
 }
 function matches(p){
   if (p.meals.length && !p.meals.includes(curMeal())) return false;
-  if (f.food !== "Any" && !p.foods.includes(f.food)) return false;
-  if (f.budget !== "Any"){ const v = priceVal(p); if (v === null || v > BUDGETS[f.budget]) return false; }
-  if (f.dist !== "Any"){ const d = distKm(p); if (d === null || d > DISTS[f.dist]) return false; }
+  if (f.food.length && !f.food.some(x => p.foods.includes(x))) return false;
+  if (f.budget !== "Any" && tierOf(p) !== BUDGETS[f.budget]) return false;
+  if (f.area !== "Any" && aKey(p.area) !== f.area) return false;
   return true;
 }
 function hits(){
+  const rank = new Map(areaList().map((a, i) => [a.key, i]));
+  const rk = p => { const k = aKey(p.area); return k && rank.has(k) ? rank.get(k) : 9999; };
   return state.places.filter(matches).sort((a,b) => {
+    const r = rk(a) - rk(b); if (r) return r;
     const x = priceVal(a), y = priceVal(b);
     if (x === null && y === null) return stats(b).total - stats(a).total;
     if (x === null) return 1;
@@ -507,11 +570,9 @@ function itemRow(p, withBtn){
     <button class="btn sm" data-eat="${p.id}" title="Log a visit">+1</button>${withBtn ? `<button class="btn ghost sm" data-edit="${p.id}">Edit</button><button class="x" data-del="${p.id}" aria-label="Remove ${esc(p.name)}">✕</button>` : ""}</div>`;
 }
 function render(){
-  $("filters").innerHTML = FILTERS.map(g =>
-    `<div class="fl">${g.label}</div><div class="chips">` +
-    g.opts.map(o => `<button class="chip ${f[g.k]===o?"on":""}" data-f="${g.k}" data-v="${esc(o)}">${o==="Auto" ? "Auto · " + autoMeal() : esc(o)}</button>`).join("") + `</div>`).join("");
-  $("locLine").innerHTML = loc ? "📍 Distances are from your current location."
-    : `📍 Distances are from MSN Bukit Jalil (approx.). <button class="btn ghost sm" id="myloc">Use my location</button>`;
+  $("filters").innerHTML = filtersHtml(); renderAreaSug();
+  $("locLine").innerHTML = loc ? "📍 Areas are sorted from your current location."
+    : `📍 Areas are sorted from MSN Bukit Jalil (approx.). <button class="btn ghost sm" id="myloc">Use my location</button>`;
   $("gsearch").hidden = !GKEY; $("gnote").hidden = !!GKEY; $("enrich").hidden = !GKEY;
 
   let html = notice ? `<div class="note">${notice.text}${notice.ids ? ` <button class="btn ghost sm" data-undo="1">Undo</button>` : ""}</div>` : "";
@@ -519,8 +580,19 @@ function render(){
   else if (!shown) html += `<div class="empty">Choose what you feel like, then tap Suggest places.</div>`;
   else {
     const h = hits();
-    if (!h.length) html += `<div class="empty">No saved places match these choices. Places without a price, distance or food type are left out when you filter on that. Tap Edit to fill them in${GKEY ? ", or use Fill in from Google" : ""}.</div>`;
-    else html += `<div class="meta" style="margin:12px 0 2px;color:var(--mute)">${h.length} place${h.length===1?"":"s"} for ${curMeal().toLowerCase()}, cheapest first</div>` + h.map(p => itemRow(p, false)).join("");
+    if (!h.length) html += `<div class="empty">No saved places match these choices. Places without a price, area or food type are left out when you filter on that. Tap Edit to fill them in${GKEY ? ", or use Fill in from Google" : ""}.</div>`;
+    else {
+      const order = areaList(); let last = null;
+      html += `<div class="meta" style="margin:12px 0 0;color:var(--mute)">${h.length} place${h.length===1?"":"s"} for ${curMeal().toLowerCase()}: nearest area first, then cheapest</div>`;
+      h.forEach(p => {
+        const k = aKey(p.area);
+        if (k !== last){
+          last = k; const a = order.find(x => x.key === k);
+          html += `<div class="grp">${k ? esc(a.label) + (a.km !== null ? " · " + a.km.toFixed(1) + " km away" : "") : "No area set"}</div>`;
+        }
+        html += itemRow(p, false);
+      });
+    }
   }
   $("result").innerHTML = html;
 
@@ -535,7 +607,7 @@ function resetForm(){
   editing = null; pending = null; gres = []; priceOrig = null;
   ["name","base","dist","price","areaIn","hoursIn"].forEach(i => $(i).value = "");
   $("gres").innerHTML = ""; $("hereMsg").textContent = "";
-  setChecks("mealChecks", []); setChecks("foodChecks", []);
+  setChecks("mealChecks", []); setChecks("foodChecks", []); renderAreaSug();
   $("add").textContent = "Add place"; $("formTitle").textContent = "Add a place"; $("cancel").hidden = true;
 }
 function renderGres(){
@@ -577,7 +649,16 @@ async function enrichAll(){
 document.addEventListener("click", async e => {
   const t = e.target.closest("button");
   if (!t) return;
-  if (t.dataset.f){ f[t.dataset.f] = t.dataset.v; render(); }
+  if (t.dataset.f){
+    const k = t.dataset.f, v = t.dataset.v;
+    if (k === "food"){
+      if (v === "Any") f.food = [];
+      else if (v === "__hot") f.food = HOT.every(x => f.food.includes(x)) ? f.food.filter(x => !HOT.includes(x)) : [...new Set([...f.food, ...HOT])];
+      else f.food = f.food.includes(v) ? f.food.filter(x => x !== v) : [...f.food, v];
+    } else f[k] = v;
+    render();
+  }
+  else if (t.dataset.area !== undefined){ $("areaIn").value = t.dataset.area; renderAreaSug(); }
   else if (t.dataset.eat){ eat(t.dataset.eat); }
   else if (t.dataset.undo){
     if (notice && notice.ids){
@@ -587,14 +668,14 @@ document.addEventListener("click", async e => {
   }
   else if (t.dataset.use){
     const r = gres[Number(t.dataset.use)]; if (!r) return;
-    pending = r; $("name").value = r.name; setPrice(r); $("areaIn").value = r.area || ""; $("hoursIn").value = "";
+    pending = r; $("name").value = r.name; setPrice(r); $("areaIn").value = r.area || ""; renderAreaSug(); $("hoursIn").value = "";
     setChecks("foodChecks", detectFoods(r.name + " " + r.kind));
     gres = []; $("gres").innerHTML = `<div class="meta">Selected: ${esc(r.name)}${r.priceText ? " · " + esc(r.priceText) : ""}. Tap Add place to save.</div>`;
   }
   else if (t.dataset.edit){
     const p = state.places.find(x => x.id === t.dataset.edit); if (!p) return;
     editing = p.id; pending = {gid:p.gid,lat:p.lat,lng:p.lng,rating:p.rating,addr:p.addr,kind:p.kind,priceNum:p.priceNum,priceText:p.priceText,hours:p.hours||[]};
-    $("name").value = p.name; $("base").value = p.base || ""; setPrice(p); $("areaIn").value = p.area || ""; $("hoursIn").value = p.hoursText || "";
+    $("name").value = p.name; $("base").value = p.base || ""; setPrice(p); $("areaIn").value = p.area || ""; renderAreaSug(); $("hoursIn").value = p.hoursText || "";
     $("dist").value = p.dist === null ? "" : p.dist;
     setChecks("mealChecks", p.meals); setChecks("foodChecks", p.foods);
     $("add").textContent = "Save changes"; $("formTitle").textContent = "Edit place"; $("cancel").hidden = false;
@@ -619,7 +700,7 @@ document.addEventListener("click", async e => {
   else if (t.id === "gopen"){
     const n = $("name").value.trim();
     if (!n){ $("name").focus(); return; }
-    window.open("https://www.google.com/search?q=" + encodeURIComponent(n + " price range opening hours"), "_blank", "noopener");
+    window.open("https://www.google.com/search?q=" + encodeURIComponent(n), "_blank", "noopener");
   }
   else if (t.id === "gsearch"){ gsearch(); }
   else if (t.id === "enrich"){ enrichAll(); }
@@ -667,6 +748,7 @@ $("restore").addEventListener("change", async e => {
   }catch(err){ alert("That file isn’t a valid backup."); }
   e.target.value = "";
 });
+$("areaIn").addEventListener("input", renderAreaSug);
 $("syncBtn").addEventListener("click", () => { $("syncPanel").hidden = !$("syncPanel").hidden; });
 $("syLogin").addEventListener("click", () => authAction("login"));
 $("syNew").addEventListener("click", () => authAction("new"));
