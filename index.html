@@ -59,6 +59,9 @@ h2{font-size:1.05rem;margin:0 0 10px}
 .note{background:var(--soft);border-radius:10px;padding:10px 12px;margin:10px 0;font-size:.92rem}
 .hit{padding:12px 0}
 .grp{font-weight:700;font-size:.95rem;margin:16px 0 0}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin:5px 0}
+.tag{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.8rem;font-weight:600;background:hsl(var(--h) var(--s,70%) 90%);color:hsl(var(--h) 60% 26%)}
+@media (prefers-color-scheme:dark){.tag{background:hsl(var(--h) calc(var(--s,70%) * .5) 24%);color:hsl(var(--h) 70% 82%)}}
 </style>
 </head>
 <body>
@@ -104,7 +107,7 @@ h2{font-size:1.05rem;margin:0 0 10px}
   <section class="card">
     <div id="filters"></div>
     <div class="meta" id="locLine" style="color:var(--mute);font-size:.85rem;margin-top:10px"></div>
-    <div class="row" style="margin-top:12px"><button class="btn" id="suggest">Suggest places</button></div>
+    <div class="row" style="margin-top:12px"><button class="btn" id="suggest">Suggest places</button><button class="btn ghost" id="reset">Reset options</button></div>
     <div id="result"></div>
   </section>
 
@@ -122,12 +125,8 @@ h2{font-size:1.05rem;margin:0 0 10px}
     <div id="mealChecks"></div>
     <label class="lbl">Food type</label>
     <div id="foodChecks"></div>
-    <div class="two">
-      <div><label class="lbl" for="price">Price per person (RM): a number or a range</label>
-        <input type="text" id="price" autocomplete="off" placeholder="e.g. 15 or 10-20"></div>
-      <div><label class="lbl" for="dist">Distance in km (only if no Google location)</label>
-        <input type="number" id="dist" min="0" step="0.5" placeholder="e.g. 2.5"></div>
-    </div>
+    <label class="lbl" for="price">Price per person (RM): a number or a range</label>
+    <input type="text" id="price" autocomplete="off" placeholder="e.g. 15 or 10-20">
     <div class="two">
       <div><label class="lbl" for="areaIn">Area</label>
         <input type="text" id="areaIn" autocomplete="off" placeholder="e.g. Bukit Jalil">
@@ -409,11 +408,17 @@ function areaList(){
 }
 function areaSuggestions(typed){
   const tk = aKey(typed), list = areaList();
-  if (!tk) return {title:"Saved areas", items:list.slice(0, 6).map(a => a.label)};
-  return {title:"Did you mean", items:list.filter(a => {
-    if (a.key === tk) return a.label !== typed.trim();
-    return a.key.includes(tk) || tk.includes(a.key) || lev(a.key, tk) <= Math.max(1, Math.floor(Math.min(a.key.length, tk.length) / 4));
-  }).map(a => a.label)};
+  if (!tk) return {title:"", items:[]};
+  const exact = list.find(a => a.key === tk);
+  if (exact) return {title:"Use saved spelling", items: exact.label !== typed.trim() ? [exact.label] : []};
+  const tiers = [
+    list.filter(a => a.key.startsWith(tk) || tk.startsWith(a.key)),
+    list.filter(a => a.key.split(" ").some(w => w.startsWith(tk))),
+    tk.length >= 3 ? list.filter(a => a.key.includes(tk) || tk.includes(a.key)) : [],
+    tk.length >= 4 ? list.filter(a => lev(a.key, tk) <= Math.max(1, Math.floor(Math.min(a.key.length, tk.length) / 4))) : []
+  ];
+  const hit = tiers.find(t => t.length);
+  return {title:"Did you mean", items: hit ? hit.slice(0, 3).map(a => a.label) : []};
 }
 function renderAreaSug(){
   const el = $("areaSug"); if (!el) return;
@@ -432,7 +437,7 @@ function filtersHtml(){
       FOODS.map(o => chipHtml("food", o, o, f.food.includes(o))).join("")) +
     grp("Budget", ["Any", ...Object.keys(BUDGETS)].map(o => chipHtml("budget", o, o, f.budget === o)).join("")) +
     grp("Area (nearest first)", chipHtml("area", "Any", "Any", f.area === "Any") +
-      ars.map(a => chipHtml("area", a.key, a.label + (a.km !== null ? " · " + a.km.toFixed(1) + " km" : ""), f.area === a.key)).join("")) +
+      ars.map(a => chipHtml("area", a.key, a.label, f.area === a.key)).join("")) +
     grp("Eating with", WHO.map(o => chipHtml("who", o, o, f.who === o)).join(""));
 }
 function hav(a, b){
@@ -494,7 +499,7 @@ function hits(){
 }
 function visitLine(p){
   const s = stats(p), w = withCount(p);
-  const last = s.last ? new Date(s.last).toLocaleDateString(undefined,{day:"numeric",month:"short"}) : "not logged yet";
+  const last = s.last ? new Date(s.last).toLocaleString(undefined,{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"}) : "not logged yet";
   return s.total + " visit" + (s.total===1?"":"s") + (w ? " (" + w + " " + (f.who==="Alone"?"alone":"with " + f.who.toLowerCase()) + ")" : "") + " · last: " + last;
 }
 
@@ -564,9 +569,30 @@ async function eat(id){
   }
 }
 
-function itemRow(p, withBtn){
+const hueOf = t => { let h = 0; for (const c of t) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+const TIER_HUE = {Low:145, Medium:45, High:345};
+const FOOD_HUE = {Rice:205, Noodles:275, Pasta:25, Hotpot:320, Soup:175, "Food court":240, Others:215};
+const tag = (text, h, sat) => `<span class="tag" style="--h:${h};--s:${sat || 70}%">${esc(text)}</span>`;
+function tagsHtml(p){
+  const t = [], pl = priceLabel(p);
+  if (pl) t.push(tag(pl, TIER_HUE[tierOf(p)] !== undefined ? TIER_HUE[tierOf(p)] : 215, tierOf(p) ? 70 : 10));
+  if (p.area) t.push(tag(p.area, hueOf(aKey(p.area))));
+  (p.foods || []).forEach(x => t.push(tag(x, FOOD_HUE[x] !== undefined ? FOOD_HUE[x] : 215, x === "Others" ? 12 : 70)));
+  if (p.rating) t.push(`<span class="meta">★${p.rating}</span>`);
+  return t.length ? `<div class="tags">${t.join("")}</div>` : "";
+}
+const minsOf = t => { const d = new Date(t); return d.getHours() * 60 + d.getMinutes(); };
+function timeCount(p){
+  const now = minsOf(Date.now());
+  return p.visits.filter(v => {
+    if (f.meal !== "Auto") return v.meal === f.meal;
+    const d = Math.abs(minsOf(v.t) - now);
+    return Math.min(d, 1440 - d) <= 90;
+  }).length;
+}
+function itemRow(p, withBtn, note){
   return `<div class="item"><div style="flex:1;min-width:0"><div class="nm">${esc(p.name)}</div>
-    <div class="meta">${esc(tagLine(p))}</div>${todayHours(p) ? `<div class="meta">Today: ${esc(todayHours(p))}</div>` : ""}<div class="meta">${esc(visitLine(p))}</div></div>
+    ${tagsHtml(p)}${todayHours(p) ? `<div class="meta">Today: ${esc(todayHours(p))}</div>` : ""}<div class="meta">${esc(visitLine(p))}</div>${note ? `<div class="meta" style="color:var(--accent)">${esc(note)}</div>` : ""}</div>
     <button class="btn sm" data-eat="${p.id}" title="Log a visit">+1</button>${withBtn ? `<button class="btn ghost sm" data-edit="${p.id}">Edit</button><button class="x" data-del="${p.id}" aria-label="Remove ${esc(p.name)}">✕</button>` : ""}</div>`;
 }
 function render(){
@@ -583,12 +609,22 @@ function render(){
     if (!h.length) html += `<div class="empty">No saved places match these choices. Places without a price, area or food type are left out when you filter on that. Tap Edit to fill them in${GKEY ? ", or use Fill in from Google" : ""}.</div>`;
     else {
       const order = areaList(); let last = null;
-      html += `<div class="meta" style="margin:12px 0 0;color:var(--mute)">${h.length} place${h.length===1?"":"s"} for ${curMeal().toLowerCase()}: nearest area first, then cheapest</div>`;
-      h.forEach(p => {
+      const usual = h.filter(p => timeCount(p) > 0).sort((x, y) => timeCount(y) - timeCount(x));
+      const rest = h.filter(p => timeCount(p) === 0);
+      html += `<div class="meta" style="margin:12px 0 0;color:var(--mute)">${h.length} place${h.length===1?"":"s"} for ${curMeal().toLowerCase()}${usual.length ? "" : ": nearest area first, then cheapest"}</div>`;
+      if (usual.length){
+        html += `<div class="grp">Usual around this time</div><div class="meta" style="color:var(--mute)">Based on the times you logged before</div>`;
+        usual.forEach(p => {
+          const n = timeCount(p);
+          html += itemRow(p, false, "Logged " + n + "× " + (f.meal === "Auto" ? "around this time" : "for " + f.meal.toLowerCase()));
+        });
+        if (rest.length) html += `<div class="meta" style="margin:16px 0 0;color:var(--mute)">Other places: nearest area first, then cheapest</div>`;
+      }
+      rest.forEach(p => {
         const k = aKey(p.area);
         if (k !== last){
           last = k; const a = order.find(x => x.key === k);
-          html += `<div class="grp">${k ? esc(a.label) + (a.km !== null ? " · " + a.km.toFixed(1) + " km away" : "") : "No area set"}</div>`;
+          html += `<div class="grp">${k ? esc(a.label) : "No area set"}</div>`;
         }
         html += itemRow(p, false);
       });
@@ -605,7 +641,7 @@ function checks(n){ return [...document.querySelectorAll(`#${n} input:checked`)]
 function setChecks(n, vals){ document.querySelectorAll(`#${n} input`).forEach(i => i.checked = vals.includes(i.value)); }
 function resetForm(){
   editing = null; pending = null; gres = []; priceOrig = null;
-  ["name","base","dist","price","areaIn","hoursIn"].forEach(i => $(i).value = "");
+  ["name","base","price","areaIn","hoursIn"].forEach(i => $(i).value = "");
   $("gres").innerHTML = ""; $("hereMsg").textContent = "";
   setChecks("mealChecks", []); setChecks("foodChecks", []); renderAreaSug();
   $("add").textContent = "Add place"; $("formTitle").textContent = "Add a place"; $("cancel").hidden = true;
@@ -676,7 +712,6 @@ document.addEventListener("click", async e => {
     const p = state.places.find(x => x.id === t.dataset.edit); if (!p) return;
     editing = p.id; pending = {gid:p.gid,lat:p.lat,lng:p.lng,rating:p.rating,addr:p.addr,kind:p.kind,priceNum:p.priceNum,priceText:p.priceText,hours:p.hours||[]};
     $("name").value = p.name; $("base").value = p.base || ""; setPrice(p); $("areaIn").value = p.area || ""; renderAreaSug(); $("hoursIn").value = p.hoursText || "";
-    $("dist").value = p.dist === null ? "" : p.dist;
     setChecks("mealChecks", p.meals); setChecks("foodChecks", p.foods);
     $("add").textContent = "Save changes"; $("formTitle").textContent = "Edit place"; $("cancel").hidden = false;
     $("name").scrollIntoView({behavior:"smooth", block:"center"}); $("name").focus();
@@ -688,6 +723,10 @@ document.addEventListener("click", async e => {
       if (editing === p.id) resetForm();
       save(); render();
     }
+  }
+  else if (t.id === "reset"){
+    f = {meal:"Auto", food:[], budget:"Any", area:"Any", who:"Alone"};
+    shown = false; notice = null; render();
   }
   else if (t.id === "suggest"){ shown = true; notice = null; render(); await getLoc(); render(); }
   else if (t.id === "myloc"){ await getLoc(); if (!loc) alert("Couldn’t get your location. Allow location access for this site in your browser settings."); render(); }
@@ -716,10 +755,9 @@ document.addEventListener("click", async e => {
       if (!pp){ alert("Enter the price as a number like 15, or a range like 10-20."); $("price").focus(); return; }
       pnum = pp.num; ptext = pp.text;
     }
-    const d = parseFloat($("dist").value);
     const data = {name, meals:checks("mealChecks"), foods:checks("foodChecks"), priceNum:pnum, priceText:ptext,
       area:$("areaIn").value.trim(), hoursText:$("hoursIn").value.trim(),
-      dist:isNaN(d)?null:d, base:Math.max(0, parseInt($("base").value, 10) || 0)};
+      base:Math.max(0, parseInt($("base").value, 10) || 0)};
     if (pnum !== null) data.price = "";
     if (pending) Object.assign(data, {gid:pending.gid||"", lat:typeof pending.lat==="number"?pending.lat:null, lng:typeof pending.lng==="number"?pending.lng:null, rating:pending.rating||null, addr:pending.addr||"", kind:pending.kind||"", hours:Array.isArray(pending.hours)?pending.hours:[]});
     if (editing){ const p = state.places.find(x => x.id === editing); if (p) Object.assign(p, data); }
