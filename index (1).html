@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="application-name" content="What to Eat">
+<meta name="apple-mobile-web-app-title" content="What to Eat">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#d9582b">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<title>What to Eat</title>
+<style>
+:root{--bg:#fbf7f2;--card:#fff;--ink:#2b2420;--mute:#7a6f66;--line:#eadfd3;--accent:#d9582b;--accent-ink:#fff;--soft:#fdeee6;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1b1714;--card:#262019;--ink:#f3ebe3;--mute:#a69a8f;--line:#3a3128;--accent:#f0764a;--accent-ink:#1b1714;--soft:#3a2a21}}
+:root[data-theme="dark"]{--bg:#1b1714;--card:#262019;--ink:#f3ebe3;--mute:#a69a8f;--line:#3a3128;--accent:#f0764a;--accent-ink:#1b1714;--soft:#3a2a21}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:640px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:1.5rem;margin:8px 0 2px}
+.sub{color:var(--mute);margin:0 0 18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:16px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.fl{font-size:.8rem;color:var(--mute);margin:10px 0 4px}
+.fl:first-child{margin-top:0}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:transparent;color:var(--ink);padding:5px 12px;border-radius:999px;font:inherit;font-size:.9rem;cursor:pointer}
+.chip.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button{font:inherit;cursor:pointer}
+.btn{border:0;background:var(--accent);color:var(--accent-ink);padding:10px 16px;border-radius:10px;font-weight:600}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);font-weight:500}
+.btn.sm{padding:6px 10px;font-size:.85rem}
+.pick{background:var(--soft);border-radius:12px;padding:16px;margin:14px 0 12px}
+.pick .name{font-size:1.4rem;font-weight:700}
+.pick .tags{color:var(--mute);font-size:.9rem;margin-top:2px}
+.pick .why{margin-top:6px;font-size:.95rem}
+.empty{color:var(--mute);padding:14px 0 10px}
+input[type=text],input[type=number],input[type=email],input[type=password],select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit}
+label.lbl{display:block;font-size:.85rem;color:var(--mute);margin:12px 0 4px}
+.chk{display:inline-flex;gap:5px;align-items:center;margin-right:12px;font-size:.95rem}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+h2{font-size:1.05rem;margin:0 0 10px}
+.item{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.item:first-of-type{border-top:0}
+.item .meta{color:var(--mute);font-size:.85rem}
+.item .nm{font-weight:600}
+.x{background:none;border:0;color:var(--mute);font-size:1.1rem;padding:6px}
+.bar{height:6px;border-radius:4px;background:var(--line);margin-top:5px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent)}
+.top{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:16px}
+.top .status{color:var(--mute);font-size:.85rem}
+.install{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:16px;font-size:.95rem}
+.install ol{margin:6px 0 0;padding-left:20px}
+.install p{margin:0 0 4px}
+.note{background:var(--soft);border-radius:10px;padding:10px 12px;margin:10px 0;font-size:.92rem}
+.hit{padding:12px 0}
+.grp{font-weight:700;font-size:.95rem;margin:16px 0 0}
+</style>
+</head>
+<body>
+<main>
+  <h1>What should I eat today?</h1>
+  <p class="sub">Tell me what you feel like. I’ll pick from your own places, favouring the ones you go to most.</p>
+
+  <div class="top">
+    <div class="row"><button class="btn ghost sm" id="install" hidden>Add to home screen</button>
+    <button class="btn ghost sm" id="syncBtn">Sync devices</button></div>
+    <span class="status" id="status">Saved on this device</span>
+  </div>
+  <div class="install" id="installHelp" hidden>
+    <p><strong>To add this to your home screen:</strong></p>
+    <ol>
+      <li><strong>iPhone (Safari):</strong> tap the Share button, then “Add to Home Screen”.</li>
+      <li><strong>Android (Chrome):</strong> tap the ⋮ menu, then “Install app” or “Add to home screen”.</li>
+    </ol>
+  </div>
+
+  <section class="card" id="syncPanel" hidden>
+    <h2>Sync across devices</h2>
+    <div id="syOff" hidden><p style="margin:0">Sync isn’t switched on yet. Fill in your Firebase details in <code>firebase-config.js</code> to turn it on.</p></div>
+    <div id="syIn" hidden>
+      <label class="lbl" for="syEmail">Email</label>
+      <input type="email" id="syEmail" autocomplete="email">
+      <label class="lbl" for="syPw">Password (at least 6 characters)</label>
+      <input type="password" id="syPw" autocomplete="current-password">
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="syLogin">Sign in</button>
+        <button class="btn ghost" id="syNew">Create account</button>
+        <button class="btn ghost" id="syReset">Forgot password</button>
+      </div>
+      <p style="color:var(--mute);font-size:.9rem;margin:10px 0 0">Use the same email and password on every device. New here? Tap Create account first.</p>
+    </div>
+    <div id="syUser" hidden>
+      <p style="margin:0 0 10px">Signed in as <strong id="syWho"></strong>. Your places sync automatically between your devices.</p>
+      <button class="btn ghost" id="syOut">Sign out</button>
+    </div>
+    <p id="syMsg" style="color:var(--accent);margin:10px 0 0"></p>
+  </section>
+
+  <section class="card">
+    <div id="filters"></div>
+    <div class="meta" id="locLine" style="color:var(--mute);font-size:.85rem;margin-top:10px"></div>
+    <div class="row" style="margin-top:12px"><button class="btn" id="suggest">Suggest places</button></div>
+    <div id="result"></div>
+  </section>
+
+  <section class="card">
+    <h2 id="formTitle">Add a place</h2>
+    <label class="lbl" for="name">Name</label>
+    <div class="row" style="flex-wrap:nowrap">
+      <input type="text" id="name" placeholder="e.g. Delish Food Village">
+      <button class="btn ghost" id="gsearch" hidden style="white-space:nowrap">Search Google</button>
+    </div>
+    <div id="gnote" class="meta" style="color:var(--mute);font-size:.85rem;margin-top:6px" hidden>Automatic Google lookup isn’t switched on yet. Use the button below to check on Google yourself, or add your key in <code>google-config.js</code> to fill in price, area and hours automatically.</div>
+    <div class="row" style="margin-top:8px"><button class="btn ghost sm" id="gopen">Check price, area &amp; hours on Google</button></div>
+    <div id="gres"></div>
+    <label class="lbl">Usually for (leave empty for any meal)</label>
+    <div id="mealChecks"></div>
+    <label class="lbl">Food type</label>
+    <div id="foodChecks"></div>
+    <div class="two">
+      <div><label class="lbl" for="price">Price per person (RM): a number or a range</label>
+        <input type="text" id="price" autocomplete="off" placeholder="e.g. 15 or 10-20"></div>
+      <div><label class="lbl" for="dist">Distance in km (only if no Google location)</label>
+        <input type="number" id="dist" min="0" step="0.5" placeholder="e.g. 2.5"></div>
+    </div>
+    <div class="two">
+      <div><label class="lbl" for="areaIn">Area</label>
+        <input type="text" id="areaIn" autocomplete="off" placeholder="e.g. Bukit Jalil">
+        <div class="chips" id="areaSug" style="margin-top:6px"></div></div>
+      <div><label class="lbl" for="hoursIn">Opening hours (optional)</label>
+        <input type="text" id="hoursIn" autocomplete="off" placeholder="e.g. 8am-10pm"></div>
+    </div>
+    <div class="row" style="margin-top:8px"><button class="btn ghost sm" id="here">I’m at this place now: save my location</button><span class="meta" id="hereMsg" style="color:var(--mute)"></span></div>
+    <label class="lbl" for="base">Roughly how many times have you been before? (optional)</label>
+    <input type="number" id="base" min="0" placeholder="0">
+    <div class="row" style="margin-top:14px">
+      <button class="btn" id="add">Add place</button>
+      <button class="btn ghost" id="cancel" hidden>Cancel</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:6px">
+      <h2 style="margin:0">Your places</h2>
+      <div class="row">
+        <button class="btn ghost sm" id="enrich" hidden>Fill in from Google</button>
+        <button class="btn ghost sm" id="backup">Back up</button>
+        <label class="btn ghost sm" for="restore" style="cursor:pointer">Restore</label>
+        <input type="file" id="restore" accept="application/json,.json" hidden>
+      </div>
+    </div>
+    <div id="list"></div>
+  </section>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="google-config.js"></script>
+<script>
+const KEY = "what-to-eat-v1";
+const GKEY = window.GOOGLE_PLACES_KEY || "";
+const $ = id => document.getElementById(id);
+const MEALS = ["Breakfast","Lunch","Dinner","Supper","Snack","Dessert"];
+const FOODS = ["Rice","Noodles","Pasta","Hotpot","Soup","Food court","Others"];
+const HOT = ["Soup","Hotpot"];
+const WHO = ["Alone","Friends","Family","Colleagues"];
+const BUDGETS = {"Low (RM1–20)":"Low","Medium (RM20–40)":"Medium","High (above RM40)":"High"};
+const BASE = {lat:3.0545, lng:101.6915};
+const LEGACY = {Low:12, Medium:25, High:50};
+function normalise(s){
+  if (s && Array.isArray(s.places)){
+    return {places: s.places.map(p => {
+      const q = {foods:[],price:"",priceNum:null,priceText:"",dist:null,lat:null,lng:null,gid:"",rating:null,addr:"",kind:"",area:"",hours:[],hoursText:"",base:0,meals:[],visits:[],...p};
+      q.foods = q.foods.map(x => x === "Other" ? "Others" : x);
+      return q;
+    })};
+  }
+  return null;
+}
+function load(){
+  try{ const s = normalise(JSON.parse(localStorage.getItem(KEY) || "null")); if (s) return s; }catch(e){}
+  return {places:[]};
+}
+let state = load();
+let f = {meal:"Auto", food:[], budget:"Any", area:"Any", who:"Alone"};
+let shown = false, notice = null, editing = null, pending = null, gres = [], loc = null, priceOrig = null;
+const uid = () => Math.random().toString(36).slice(2,9);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+let sync = {ready:false, user:null, ref:null, unsub:null, timer:null, auth:null, db:null, error:""};
+function setStatus(t){ const el = document.getElementById("status"); if (el) el.textContent = t; }
+function stateJson(){ return JSON.stringify(state); }
+function setDirty(v){ try{ v ? localStorage.setItem(KEY+"-dirty","1") : localStorage.removeItem(KEY+"-dirty"); }catch(e){} }
+function isDirty(){ try{ return localStorage.getItem(KEY+"-dirty") === "1"; }catch(e){ return false; } }
+function save(){
+  try{ localStorage.setItem(KEY, stateJson()); setStatus(sync.ref ? "Syncing…" : "Saved on this device"); }
+  catch(e){ setStatus("Couldn’t save on this device"); }
+  setDirty(true);
+  if (sync.ref){ clearTimeout(sync.timer); sync.timer = setTimeout(push, 500); }
+}
+async function push(){
+  sync.timer = null;
+  if (!sync.ref) return;
+  try{
+    await sync.ref.set({json: stateJson(), updated: Date.now()});
+    setDirty(false); setStatus("Synced to your account");
+  }catch(e){ setStatus("Saved on this device (sync problem)"); sync.error = friendly(e); renderSync(); }
+}
+function mergeStates(a, b){
+  const map = new Map();
+  [...a.places, ...b.places].forEach(p => {
+    const k = p.name.trim().toLowerCase();
+    const q = map.get(k);
+    if (!q){ map.set(k, JSON.parse(JSON.stringify(p))); return; }
+    const seen = new Set(q.visits.map(v => v.t));
+    p.visits.forEach(v => { if (!seen.has(v.t)) q.visits.push(v); });
+    q.base = Math.max(q.base || 0, p.base || 0);
+    ["meals","foods"].forEach(f => { q[f] = [...new Set([...(q[f]||[]), ...(p[f]||[])])]; });
+    if (!q.price) q.price = p.price;
+    if (q.dist === null || q.dist === "") q.dist = p.dist;
+    if (q.priceNum === null || q.priceNum === undefined){ q.priceNum = p.priceNum; q.priceText = p.priceText; }
+    if (q.lat === null || q.lat === undefined){ q.lat = p.lat; q.lng = p.lng; q.gid = p.gid; q.rating = p.rating; q.addr = p.addr; q.kind = p.kind; }
+    if (!q.area) q.area = p.area;
+    if ((!q.hours || !q.hours.length) && p.hours) q.hours = p.hours;
+    if (!q.hoursText) q.hoursText = p.hoursText;
+  });
+  return {places: [...map.values()]};
+}
+function friendly(e){
+  const c = (e && e.code) || "";
+  const m = {
+    "auth/invalid-email":"That email doesn’t look right.",
+    "auth/email-already-in-use":"That email already has an account. Tap Sign in.",
+    "auth/weak-password":"Use a password with at least 6 characters.",
+    "auth/wrong-password":"Wrong email or password.",
+    "auth/invalid-credential":"Wrong email or password.",
+    "auth/user-not-found":"No account for that email. Tap Create account.",
+    "auth/operation-not-allowed":"Email sign-in isn’t switched on in Firebase yet.",
+    "auth/network-request-failed":"No internet connection.",
+    "auth/too-many-requests":"Too many tries. Wait a bit and try again.",
+    "permission-denied":"Firebase is blocking access. Check the Firestore rules.",
+    "failed-precondition":"The Firestore database hasn’t been created yet."
+  };
+  return m[c] || "Something went wrong (" + (c || "unknown") + ").";
+}
+function renderSync(){
+  const $ = id => document.getElementById(id);
+  $("syOff").hidden = sync.ready;
+  $("syIn").hidden = !sync.ready || !!sync.user;
+  $("syUser").hidden = !sync.user;
+  if (sync.user) $("syWho").textContent = sync.user.email;
+  $("syMsg").textContent = sync.error || "";
+  $("syncBtn").textContent = sync.user ? "Sync: on" : "Sync devices";
+}
+function initSync(){
+  const cfg = window.FIREBASE_CONFIG;
+  if (cfg && cfg.apiKey && typeof firebase !== "undefined"){
+    try{
+      firebase.initializeApp(cfg);
+      sync.auth = firebase.auth(); sync.db = firebase.firestore();
+      sync.ready = true;
+      sync.auth.onAuthStateChanged(onUser);
+    }catch(e){ sync.error = "Sync couldn’t start. Check firebase-config.js."; }
+  }
+  renderSync();
+}
+async function onUser(user){
+  if (sync.unsub){ sync.unsub(); sync.unsub = null; }
+  sync.user = user; sync.ref = null; sync.error = "";
+  if (!user){ setStatus("Saved on this device"); renderSync(); return; }
+  sync.ref = sync.db.collection("users").doc(user.uid);
+  setStatus("Syncing…"); renderSync();
+  try{
+    const snap = await sync.ref.get();
+    const remote = snap.exists ? normalise(JSON.parse(snap.data().json)) : null;
+    const dirty = isDirty();
+    if (remote && !dirty) state = remote;
+    else if (remote) state = mergeStates(state, remote);
+    try{ localStorage.setItem(KEY, stateJson()); }catch(e){}
+    render();
+    if (!remote || dirty) await push();
+    else { setDirty(false); setStatus("Synced to your account"); }
+    sync.unsub = sync.ref.onSnapshot(s => {
+      if (s.metadata.hasPendingWrites || sync.timer || !s.exists) return;
+      let r = null;
+      try{ r = normalise(JSON.parse(s.data().json)); }catch(e){}
+      if (!r || JSON.stringify(r) === stateJson()) return;
+      state = r;
+      try{ localStorage.setItem(KEY, stateJson()); }catch(e){}
+      render(); setStatus("Synced to your account");
+    });
+  }catch(e){ setStatus("Saved on this device (sync problem)"); sync.error = friendly(e); renderSync(); }
+}
+async function authAction(kind){
+  const email = document.getElementById("syEmail").value.trim();
+  const pw = document.getElementById("syPw").value;
+  const msg = document.getElementById("syMsg");
+  msg.style.color = "var(--accent)"; sync.error = "";
+  if (!email){ msg.textContent = "Enter your email."; return; }
+  try{
+    if (kind === "reset"){
+      await sync.auth.sendPasswordResetEmail(email);
+      msg.style.color = "var(--mute)"; msg.textContent = "Password reset email sent."; return;
+    }
+    if (!pw){ msg.textContent = "Enter a password."; return; }
+    msg.textContent = "";
+    if (kind === "new") await sync.auth.createUserWithEmailAndPassword(email, pw);
+    else await sync.auth.signInWithEmailAndPassword(email, pw);
+  }catch(e){ msg.textContent = friendly(e); }
+}
+window.addEventListener("online", () => { if (sync.ref && isDirty()) push(); });
+let deferred = null;
+function initInstall(){
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  if (standalone) return;
+  const btn = document.getElementById("install");
+  btn.hidden = false;
+  window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferred = e; });
+  btn.addEventListener("click", async () => {
+    if (deferred){
+      try{ deferred.prompt(); await deferred.userChoice; }catch(e){}
+      deferred = null; return;
+    }
+    const h = document.getElementById("installHelp");
+    h.hidden = !h.hidden;
+  });
+}
+
+function autoMeal(){
+  const h = new Date().getHours();
+  return h >= 5 && h < 11 ? "Breakfast" : h < 16 && h >= 11 ? "Lunch" : h >= 16 && h < 22 ? "Dinner" : "Supper";
+}
+const curMeal = () => f.meal === "Auto" ? autoMeal() : f.meal;
+function stats(p){
+  const total = (p.base||0) + p.visits.length;
+  const last = p.visits.length ? Math.max(...p.visits.map(v => v.t)) : null;
+  return {total, last};
+}
+const withCount = p => p.visits.filter(v => v.who === f.who).length;
+function priceVal(p){
+  if (typeof p.priceNum === "number") return p.priceNum;
+  return LEGACY[p.price] !== undefined ? LEGACY[p.price] : null;
+}
+function priceLabel(p){
+  if (p.priceText) return p.priceText;
+  if (typeof p.priceNum === "number") return "RM" + p.priceNum;
+  return p.price ? p.price + " price" : "";
+}
+function parsePrice(v){
+  v = String(v).replace(/rm|myr/ig, "").replace(/,/g, "").trim();
+  if (!v) return {num:null, text:""};
+  let m = v.match(/^(\d+(?:\.\d+)?)\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?)$/i);
+  if (m){ let a = +m[1], b = +m[2]; if (a > b) [a, b] = [b, a]; return {num:(a+b)/2, text:"RM" + a + (b !== a ? "–" + b : "")}; }
+  m = v.match(/^(\d+(?:\.\d+)?)$/);
+  return m ? {num:+m[1], text:""} : null;
+}
+function priceField(p){
+  if (p.priceText && /^RM/.test(p.priceText)) return p.priceText.replace(/^RM\s*/, "");
+  return typeof p.priceNum === "number" ? String(p.priceNum) : "";
+}
+function setPrice(p){
+  const v = priceField(p); $("price").value = v;
+  priceOrig = {v, num: typeof p.priceNum === "number" ? p.priceNum : null, text: p.priceText || ""};
+}
+function todayHours(p){
+  if (p.hoursText) return p.hoursText;
+  if (p.hours && p.hours.length) return (p.hours[(new Date().getDay() + 6) % 7] || "").replace(/^[^:]+:\s*/, "");
+  return "";
+}
+const tierOf = p => { const v = priceVal(p); return v === null ? "" : v <= 20 ? "Low" : v <= 40 ? "Medium" : "High"; };
+const aKey = a => (a || "").trim().toLowerCase().replace(/\s+/g, " ");
+function lev(a, b){
+  const row = Array.from({length:b.length+1}, (_, j) => j);
+  for (let i = 1; i <= a.length; i++){
+    let prev = row[0]; row[0] = i;
+    for (let j = 1; j <= b.length; j++){
+      const tmp = row[j];
+      row[j] = Math.min(row[j]+1, row[j-1]+1, prev + (a[i-1] === b[j-1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return row[b.length];
+}
+function areaList(){
+  const m = new Map();
+  state.places.forEach(p => {
+    const k = aKey(p.area); if (!k) return;
+    let e = m.get(k); if (!e){ e = {key:k, names:{}, pts:[], man:[]}; m.set(k, e); }
+    const n = p.area.trim(); e.names[n] = (e.names[n] || 0) + 1;
+    if (typeof p.lat === "number" && typeof p.lng === "number") e.pts.push(p);
+    else if (p.dist !== null && p.dist !== "" && p.dist !== undefined) e.man.push(Number(p.dist));
+  });
+  return [...m.values()].map(e => {
+    const label = Object.entries(e.names).sort((a, b) => b[1] - a[1])[0][0];
+    let km = null;
+    if (e.pts.length){
+      const c = {lat:e.pts.reduce((t, p) => t + p.lat, 0) / e.pts.length, lng:e.pts.reduce((t, p) => t + p.lng, 0) / e.pts.length};
+      km = hav(loc || BASE, c);
+    } else if (e.man.length && !loc) km = Math.min(...e.man);
+    return {key:e.key, label, km};
+  }).sort((a, b) => ((a.km === null) - (b.km === null)) || (a.km - b.km) || a.label.localeCompare(b.label));
+}
+function areaSuggestions(typed){
+  const tk = aKey(typed), list = areaList();
+  if (!tk) return {title:"Saved areas", items:list.slice(0, 6).map(a => a.label)};
+  return {title:"Did you mean", items:list.filter(a => {
+    if (a.key === tk) return a.label !== typed.trim();
+    return a.key.includes(tk) || tk.includes(a.key) || lev(a.key, tk) <= Math.max(1, Math.floor(Math.min(a.key.length, tk.length) / 4));
+  }).map(a => a.label)};
+}
+function renderAreaSug(){
+  const el = $("areaSug"); if (!el) return;
+  const r = areaSuggestions($("areaIn").value);
+  el.innerHTML = r.items.length ? `<span class="meta" style="color:var(--mute);align-self:center">${r.title}:</span>` +
+    r.items.map(x => `<button class="chip" data-area="${esc(x)}">${esc(x)}</button>`).join("") : "";
+}
+const chipHtml = (k, v, label, on) => `<button class="chip ${on ? "on" : ""}" data-f="${k}" data-v="${esc(v)}">${esc(label)}</button>`;
+function filtersHtml(){
+  const ars = areaList();
+  if (f.area !== "Any" && !ars.some(a => a.key === f.area)) f.area = "Any";
+  const grp = (label, inner) => `<div class="fl">${label}</div><div class="chips">${inner}</div>`;
+  return grp("Meal (Auto follows your clock)", ["Auto", ...MEALS].map(o => chipHtml("meal", o, o === "Auto" ? "Auto · " + autoMeal() : o, f.meal === o)).join("")) +
+    grp("Feeling like (pick one or more)", chipHtml("food", "Any", "Any", !f.food.length) +
+      chipHtml("food", "__hot", "Something hot", HOT.every(x => f.food.includes(x))) +
+      FOODS.map(o => chipHtml("food", o, o, f.food.includes(o))).join("")) +
+    grp("Budget", ["Any", ...Object.keys(BUDGETS)].map(o => chipHtml("budget", o, o, f.budget === o)).join("")) +
+    grp("Area (nearest first)", chipHtml("area", "Any", "Any", f.area === "Any") +
+      ars.map(a => chipHtml("area", a.key, a.label + (a.km !== null ? " · " + a.km.toFixed(1) + " km" : ""), f.area === a.key)).join("")) +
+    grp("Eating with", WHO.map(o => chipHtml("who", o, o, f.who === o)).join(""));
+}
+function hav(a, b){
+  const R = 6371, r = x => x*Math.PI/180;
+  const dLat = r(b.lat-a.lat), dLng = r(b.lng-a.lng);
+  const h = Math.sin(dLat/2)**2 + Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+function distKm(p){
+  if (typeof p.lat === "number" && typeof p.lng === "number") return hav(loc || BASE, p);
+  return (p.dist === null || p.dist === "" || p.dist === undefined) ? null : Number(p.dist);
+}
+function getLoc(){
+  return new Promise(res => {
+    if (!navigator.geolocation){ res(); return; }
+    navigator.geolocation.getCurrentPosition(
+      p => { loc = {lat:p.coords.latitude, lng:p.coords.longitude}; res(); },
+      () => res(),
+      {enableHighAccuracy:false, timeout:8000, maximumAge:300000});
+  });
+}
+function detectFoods(t){
+  const o = [];
+  if (/\brice\b|nasi|biryani|claypot|donburi|economy rice/i.test(t)) o.push("Rice");
+  if (/noodle|\bmee\b|\bmi\b|ramen|\bpho\b|laksa|udon|soba|kuey|kway|kuay|bihun|mihun|wantan|wonton/i.test(t)) o.push("Noodles");
+  if (/pasta|spaghetti|carbonara|lasagn/i.test(t)) o.push("Pasta");
+  if (/hot ?pot|steamboat|shabu|suki|mala/i.test(t)) o.push("Hotpot");
+  if (/\bsoup\b|\bsup\b|bak kut teh|tom yum|soto/i.test(t)) o.push("Soup");
+  if (/food court|food village|hawker|medan selera|gerai/i.test(t)) o.push("Food court");
+  return o.length ? o : ["Others"];
+}
+function tagLine(p){
+  const b = [], d = distKm(p);
+  if (priceLabel(p)) b.push(priceLabel(p) + (tierOf(p) ? " · " + tierOf(p) : ""));
+  if (d !== null) b.push(d.toFixed(1) + " km");
+  if (p.area) b.push(p.area);
+  if (p.foods.length) b.push(p.foods.join("/"));
+  if (p.rating) b.push("★" + p.rating);
+  return b.join(" · ");
+}
+function matches(p){
+  if (p.meals.length && !p.meals.includes(curMeal())) return false;
+  if (f.food.length && !f.food.some(x => p.foods.includes(x))) return false;
+  if (f.budget !== "Any" && tierOf(p) !== BUDGETS[f.budget]) return false;
+  if (f.area !== "Any" && aKey(p.area) !== f.area) return false;
+  return true;
+}
+function hits(){
+  const rank = new Map(areaList().map((a, i) => [a.key, i]));
+  const rk = p => { const k = aKey(p.area); return k && rank.has(k) ? rank.get(k) : 9999; };
+  return state.places.filter(matches).sort((a,b) => {
+    const r = rk(a) - rk(b); if (r) return r;
+    const x = priceVal(a), y = priceVal(b);
+    if (x === null && y === null) return stats(b).total - stats(a).total;
+    if (x === null) return 1;
+    if (y === null) return -1;
+    return (x - y) || (stats(b).total - stats(a).total);
+  });
+}
+function visitLine(p){
+  const s = stats(p), w = withCount(p);
+  const last = s.last ? new Date(s.last).toLocaleDateString(undefined,{day:"numeric",month:"short"}) : "not logged yet";
+  return s.total + " visit" + (s.total===1?"":"s") + (w ? " (" + w + " " + (f.who==="Alone"?"alone":"with " + f.who.toLowerCase()) + ")" : "") + " · last: " + last;
+}
+
+/* Google Places (New) */
+function cs(c){ return c === "MYR" ? "RM" : (c ? c + " " : ""); }
+function parsePlace(g){
+  const o = {gid:g.id||"", name:(g.displayName&&g.displayName.text)||"", addr:g.formattedAddress||"",
+    lat:g.location?g.location.latitude:null, lng:g.location?g.location.longitude:null,
+    rating:g.rating||null, kind:(g.primaryTypeDisplayName&&g.primaryTypeDisplayName.text)||"", priceNum:null, priceText:""};
+  const comp = g.addressComponents || [];
+  const pick = t => { const c = comp.find(x => (x.types || []).includes(t)); return c ? c.longText : ""; };
+  o.area = pick("sublocality_level_1") || pick("sublocality") || pick("neighborhood") || pick("locality") || g.shortFormattedAddress || "";
+  o.hours = (g.regularOpeningHours && g.regularOpeningHours.weekdayDescriptions) || [];
+  const pr = g.priceRange;
+  if (pr && pr.startPrice){
+    const a = Number(pr.startPrice.units||0), b = pr.endPrice ? Number(pr.endPrice.units||a) : null;
+    o.priceText = cs(pr.startPrice.currencyCode) + a + (b !== null && b !== a ? "–" + b : "");
+    o.priceNum = b !== null ? (a+b)/2 : a;
+  } else if (g.priceLevel){
+    const L = {PRICE_LEVEL_FREE:[0,"Free"],PRICE_LEVEL_INEXPENSIVE:[15,"$"],PRICE_LEVEL_MODERATE:[35,"$$"],PRICE_LEVEL_EXPENSIVE:[70,"$$$"],PRICE_LEVEL_VERY_EXPENSIVE:[120,"$$$$"]}[g.priceLevel];
+    if (L){ o.priceNum = L[0]; o.priceText = L[1]; }
+  }
+  return o;
+}
+async function gSearch(q, c, radius, n){
+  const r = await fetch("https://places.googleapis.com/v1/places:searchText", {
+    method:"POST",
+    headers:{"Content-Type":"application/json","X-Goog-Api-Key":GKEY,
+      "X-Goog-FieldMask":"places.id,places.displayName,places.formattedAddress,places.location,places.priceLevel,places.priceRange,places.rating,places.primaryTypeDisplayName,places.addressComponents,places.shortFormattedAddress,places.regularOpeningHours"},
+    body: JSON.stringify({textQuery:q, maxResultCount:n, locationBias:{circle:{center:{latitude:c.lat,longitude:c.lng},radius}}})
+  });
+  if (!r.ok) throw new Error("Google " + r.status);
+  const j = await r.json();
+  return (j.places || []).map(parsePlace).filter(x => x.name);
+}
+function gerr(e){
+  const m = String(e && e.message || e);
+  if (/403/.test(m)) return "Google rejected the key. Check that billing is on and the key allows this website.";
+  if (/400/.test(m)) return "Google couldn’t read the request. Check that Places API (New) is enabled.";
+  if (/Failed to fetch|NetworkError/i.test(m)) return "No internet connection, or the key is blocked for this website.";
+  return m;
+}
+const toPlace = r => ({id:uid(), name:r.name, meals:[], foods:detectFoods(r.name+" "+r.kind), price:"", priceNum:r.priceNum, priceText:r.priceText,
+  dist:null, lat:r.lat, lng:r.lng, gid:r.gid, rating:r.rating, addr:r.addr, kind:r.kind, area:r.area||"", hours:r.hours||[], hoursText:"", base:0, visits:[]});
+const known = r => state.places.some(x => (x.gid && x.gid === r.gid) || x.name.trim().toLowerCase() === r.name.trim().toLowerCase());
+
+async function addSimilar(p){
+  const c = (typeof p.lat === "number") ? {lat:p.lat, lng:p.lng} : (loc || BASE);
+  const q = p.kind || (p.foods.includes("Noodles") ? "noodle restaurant" : p.foods.includes("Rice") ? "rice restaurant" : "restaurant");
+  const found = await gSearch(q, c, 3000, 10);
+  const fresh = found.filter(r => !known(r)).slice(0, 3);
+  fresh.forEach(r => state.places.push(toPlace(r)));
+  if (fresh.length){
+    save();
+    notice = {text:"Logged a visit to " + esc(p.name) + ". Added similar places: " + fresh.map(r => esc(r.name)).join(", ") + ".", ids: fresh.map(r => r.gid || r.name)};
+  } else notice = {text:"Logged a visit to " + esc(p.name) + ". No new similar places found nearby."};
+  render();
+}
+async function eat(id){
+  const p = state.places.find(x => x.id === id);
+  if (!p) return;
+  p.visits.push({t:Date.now(), meal:curMeal(), who:f.who});
+  save(); notice = {text:"Logged a visit to " + esc(p.name) + "."}; render();
+  if (GKEY){
+    try{ await addSimilar(p); }
+    catch(e){ notice = {text:"Logged a visit to " + esc(p.name) + ". Couldn’t look up similar places: " + esc(gerr(e))}; render(); }
+  }
+}
+
+function itemRow(p, withBtn){
+  return `<div class="item"><div style="flex:1;min-width:0"><div class="nm">${esc(p.name)}</div>
+    <div class="meta">${esc(tagLine(p))}</div>${todayHours(p) ? `<div class="meta">Today: ${esc(todayHours(p))}</div>` : ""}<div class="meta">${esc(visitLine(p))}</div></div>
+    <button class="btn sm" data-eat="${p.id}" title="Log a visit">+1</button>${withBtn ? `<button class="btn ghost sm" data-edit="${p.id}">Edit</button><button class="x" data-del="${p.id}" aria-label="Remove ${esc(p.name)}">✕</button>` : ""}</div>`;
+}
+function render(){
+  $("filters").innerHTML = filtersHtml(); renderAreaSug();
+  $("locLine").innerHTML = loc ? "📍 Areas are sorted from your current location."
+    : `📍 Areas are sorted from MSN Bukit Jalil (approx.). <button class="btn ghost sm" id="myloc">Use my location</button>`;
+  $("gsearch").hidden = !GKEY; $("gnote").hidden = !!GKEY; $("enrich").hidden = !GKEY;
+
+  let html = notice ? `<div class="note">${notice.text}${notice.ids ? ` <button class="btn ghost sm" data-undo="1">Undo</button>` : ""}</div>` : "";
+  if (!state.places.length) html += `<div class="empty">Add your first place below to get started.</div>`;
+  else if (!shown) html += `<div class="empty">Choose what you feel like, then tap Suggest places.</div>`;
+  else {
+    const h = hits();
+    if (!h.length) html += `<div class="empty">No saved places match these choices. Places without a price, area or food type are left out when you filter on that. Tap Edit to fill them in${GKEY ? ", or use Fill in from Google" : ""}.</div>`;
+    else {
+      const order = areaList(); let last = null;
+      html += `<div class="meta" style="margin:12px 0 0;color:var(--mute)">${h.length} place${h.length===1?"":"s"} for ${curMeal().toLowerCase()}: nearest area first, then cheapest</div>`;
+      h.forEach(p => {
+        const k = aKey(p.area);
+        if (k !== last){
+          last = k; const a = order.find(x => x.key === k);
+          html += `<div class="grp">${k ? esc(a.label) + (a.km !== null ? " · " + a.km.toFixed(1) + " km away" : "") : "No area set"}</div>`;
+        }
+        html += itemRow(p, false);
+      });
+    }
+  }
+  $("result").innerHTML = html;
+
+  const list = $("list");
+  if (!state.places.length){ list.innerHTML = `<div class="empty">Nothing here yet.</div>`; return; }
+  list.innerHTML = [...state.places].sort((a,b) => stats(b).total - stats(a).total).map(p => itemRow(p, true)).join("");
+}
+
+function checks(n){ return [...document.querySelectorAll(`#${n} input:checked`)].map(i => i.value); }
+function setChecks(n, vals){ document.querySelectorAll(`#${n} input`).forEach(i => i.checked = vals.includes(i.value)); }
+function resetForm(){
+  editing = null; pending = null; gres = []; priceOrig = null;
+  ["name","base","dist","price","areaIn","hoursIn"].forEach(i => $(i).value = "");
+  $("gres").innerHTML = ""; $("hereMsg").textContent = "";
+  setChecks("mealChecks", []); setChecks("foodChecks", []); renderAreaSug();
+  $("add").textContent = "Add place"; $("formTitle").textContent = "Add a place"; $("cancel").hidden = true;
+}
+function renderGres(){
+  $("gres").innerHTML = gres.length ? gres.map((r,i) => `<div class="item"><div style="flex:1;min-width:0"><div class="nm">${esc(r.name)}</div>
+    <div class="meta">${esc([r.priceText, r.rating ? "★"+r.rating : "", r.area, todayHours({hours:r.hours}) ? "Today: " + todayHours({hours:r.hours}) : "", r.addr].filter(Boolean).join(" · "))}</div></div>
+    <button class="btn sm" data-use="${i}">Use this</button></div>`).join("") : `<div class="meta">No results.</div>`;
+}
+async function gsearch(){
+  const q = $("name").value.trim();
+  if (!q){ $("name").focus(); return; }
+  $("gres").innerHTML = `<div class="meta">Searching…</div>`;
+  try{ await getLoc(); gres = await gSearch(q, loc || BASE, 15000, 5); renderGres(); render(); }
+  catch(e){ $("gres").innerHTML = `<div class="meta">${esc(gerr(e))}</div>`; }
+}
+async function enrichAll(){
+  const todo = state.places.filter(p => !p.gid || (!p.area && !(p.hours && p.hours.length)));
+  if (!todo.length){ notice = {text:"All your places already have Google details."}; render(); return; }
+  notice = {text:"Looking up " + todo.length + " place" + (todo.length===1?"":"s") + "…"}; render();
+  await getLoc();
+  let n = 0;
+  for (const p of todo){
+    try{
+      const r = (await gSearch(p.name, loc || BASE, 20000, 3)).find(x => {
+        const a = x.name.toLowerCase(), b = p.name.toLowerCase();
+        return a.includes(b.split(" ")[0]) || b.includes(a.split(" ")[0]);
+      });
+      if (!r) continue;
+      Object.assign(p, {gid:r.gid, lat:r.lat, lng:r.lng, rating:r.rating, addr:r.addr, kind:r.kind});
+      if (r.area) p.area = r.area;
+      if (r.hours && r.hours.length) p.hours = r.hours;
+      if (r.priceNum !== null){ p.priceNum = r.priceNum; p.priceText = r.priceText; p.price = ""; }
+      if (!p.foods.length) p.foods = detectFoods(r.name + " " + r.kind);
+      n++;
+    }catch(e){ notice = {text:"Stopped: " + esc(gerr(e))}; render(); save(); return; }
+  }
+  save(); notice = {text:"Filled in details for " + n + " of " + todo.length + " places."}; render();
+}
+
+document.addEventListener("click", async e => {
+  const t = e.target.closest("button");
+  if (!t) return;
+  if (t.dataset.f){
+    const k = t.dataset.f, v = t.dataset.v;
+    if (k === "food"){
+      if (v === "Any") f.food = [];
+      else if (v === "__hot") f.food = HOT.every(x => f.food.includes(x)) ? f.food.filter(x => !HOT.includes(x)) : [...new Set([...f.food, ...HOT])];
+      else f.food = f.food.includes(v) ? f.food.filter(x => x !== v) : [...f.food, v];
+    } else f[k] = v;
+    render();
+  }
+  else if (t.dataset.area !== undefined){ $("areaIn").value = t.dataset.area; renderAreaSug(); }
+  else if (t.dataset.eat){ eat(t.dataset.eat); }
+  else if (t.dataset.undo){
+    if (notice && notice.ids){
+      state.places = state.places.filter(p => !(p.visits.length === 0 && notice.ids.includes(p.gid || p.name)));
+      save(); notice = {text:"Removed the similar places that were just added."}; render();
+    }
+  }
+  else if (t.dataset.use){
+    const r = gres[Number(t.dataset.use)]; if (!r) return;
+    pending = r; $("name").value = r.name; setPrice(r); $("areaIn").value = r.area || ""; renderAreaSug(); $("hoursIn").value = "";
+    setChecks("foodChecks", detectFoods(r.name + " " + r.kind));
+    gres = []; $("gres").innerHTML = `<div class="meta">Selected: ${esc(r.name)}${r.priceText ? " · " + esc(r.priceText) : ""}. Tap Add place to save.</div>`;
+  }
+  else if (t.dataset.edit){
+    const p = state.places.find(x => x.id === t.dataset.edit); if (!p) return;
+    editing = p.id; pending = {gid:p.gid,lat:p.lat,lng:p.lng,rating:p.rating,addr:p.addr,kind:p.kind,priceNum:p.priceNum,priceText:p.priceText,hours:p.hours||[]};
+    $("name").value = p.name; $("base").value = p.base || ""; setPrice(p); $("areaIn").value = p.area || ""; renderAreaSug(); $("hoursIn").value = p.hoursText || "";
+    $("dist").value = p.dist === null ? "" : p.dist;
+    setChecks("mealChecks", p.meals); setChecks("foodChecks", p.foods);
+    $("add").textContent = "Save changes"; $("formTitle").textContent = "Edit place"; $("cancel").hidden = false;
+    $("name").scrollIntoView({behavior:"smooth", block:"center"}); $("name").focus();
+  }
+  else if (t.dataset.del){
+    const p = state.places.find(x => x.id === t.dataset.del);
+    if (p && confirm("Remove " + p.name + " and its history?")){
+      state.places = state.places.filter(x => x.id !== p.id);
+      if (editing === p.id) resetForm();
+      save(); render();
+    }
+  }
+  else if (t.id === "suggest"){ shown = true; notice = null; render(); await getLoc(); render(); }
+  else if (t.id === "myloc"){ await getLoc(); if (!loc) alert("Couldn’t get your location. Allow location access for this site in your browser settings."); render(); }
+  else if (t.id === "here"){
+    await getLoc();
+    if (!loc){ alert("Couldn’t get your location. Allow location access for this site in your browser settings."); return; }
+    pending = Object.assign({}, pending || {}, {lat:loc.lat, lng:loc.lng});
+    $("hereMsg").textContent = "Location saved. Tap " + $("add").textContent + ".";
+  }
+  else if (t.id === "gopen"){
+    const n = $("name").value.trim();
+    if (!n){ $("name").focus(); return; }
+    window.open("https://www.google.com/search?q=" + encodeURIComponent(n), "_blank", "noopener");
+  }
+  else if (t.id === "gsearch"){ gsearch(); }
+  else if (t.id === "enrich"){ enrichAll(); }
+  else if (t.id === "cancel"){ resetForm(); }
+  else if (t.id === "add"){
+    const name = $("name").value.trim();
+    if (!name){ $("name").focus(); return; }
+    if (state.places.some(p => p.id !== editing && p.name.toLowerCase() === name.toLowerCase())){ alert("That place is already in your list."); return; }
+    const raw = $("price").value.trim(); let pnum, ptext;
+    if (priceOrig && raw === priceOrig.v){ pnum = priceOrig.num; ptext = priceOrig.text; }
+    else {
+      const pp = parsePrice(raw);
+      if (!pp){ alert("Enter the price as a number like 15, or a range like 10-20."); $("price").focus(); return; }
+      pnum = pp.num; ptext = pp.text;
+    }
+    const d = parseFloat($("dist").value);
+    const data = {name, meals:checks("mealChecks"), foods:checks("foodChecks"), priceNum:pnum, priceText:ptext,
+      area:$("areaIn").value.trim(), hoursText:$("hoursIn").value.trim(),
+      dist:isNaN(d)?null:d, base:Math.max(0, parseInt($("base").value, 10) || 0)};
+    if (pnum !== null) data.price = "";
+    if (pending) Object.assign(data, {gid:pending.gid||"", lat:typeof pending.lat==="number"?pending.lat:null, lng:typeof pending.lng==="number"?pending.lng:null, rating:pending.rating||null, addr:pending.addr||"", kind:pending.kind||"", hours:Array.isArray(pending.hours)?pending.hours:[]});
+    if (editing){ const p = state.places.find(x => x.id === editing); if (p) Object.assign(p, data); }
+    else state.places.push({id:uid(), visits:[], price:"", hours:[], ...data});
+    save(); resetForm(); render();
+  }
+});
+$("name").addEventListener("keydown", e => { if (e.key === "Enter") $("add").click(); });
+$("mealChecks").innerHTML = MEALS.map(m => `<label class="chk"><input type="checkbox" value="${m}"> ${m}</label>`).join("");
+$("foodChecks").innerHTML = FOODS.map(m => `<label class="chk"><input type="checkbox" value="${m}"> ${m}</label>`).join("");
+$("backup").addEventListener("click", () => {
+  const b = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(b); a.download = "what-to-eat-backup.json";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+$("restore").addEventListener("change", async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try{
+    const s = normalise(JSON.parse(await file.text()));
+    if (!s) throw new Error("bad");
+    if (!confirm("Replace your current places with this backup?")) { e.target.value = ""; return; }
+    state = s; save(); render();
+  }catch(err){ alert("That file isn’t a valid backup."); }
+  e.target.value = "";
+});
+$("areaIn").addEventListener("input", renderAreaSug);
+$("syncBtn").addEventListener("click", () => { $("syncPanel").hidden = !$("syncPanel").hidden; });
+$("syLogin").addEventListener("click", () => authAction("login"));
+$("syNew").addEventListener("click", () => authAction("new"));
+$("syReset").addEventListener("click", () => authAction("reset"));
+$("syOut").addEventListener("click", () => { if (sync.auth) sync.auth.signOut(); });
+render();
+initSync();
+initInstall();
+getLoc().then(render);
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
